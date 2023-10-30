@@ -105,7 +105,7 @@ packaging==23.2
 pandas==2.1.1
 paramiko==3.3.1
 pathtools==0.1.2
-Pillow==10.1.0
+Pillow
 pilmoji==2.0.4
 pixivpy3==3.7.3
 platformdirs==3.11.0
@@ -132,7 +132,7 @@ python-multipart==0.0.6
 pytimeparse==1.1.8
 pytorch-lightning==1.5.10
 pytz==2023.3.post1
-PyYAML~=6.0.1
+PyYAML
 rapidfuzz==3.4.0
 referencing==0.30.2
 regex==2023.10.3
@@ -162,11 +162,10 @@ thefuzz==0.20.0
 threadpoolctl==3.2.0
 tokenizers==0.14.1
 toolz==0.12.0
-torch
-torchaudio
+
 torchmetrics==1.2.0
 torchsde==0.2.6
-torchvision
+
 tqdm==4.66.1
 trampoline==0.1.2
 transformers==4.34.1

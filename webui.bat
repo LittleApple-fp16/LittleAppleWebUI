@@ -19,6 +19,7 @@ SET PYTHON=%userinput%
     echo 完成
 ) else (
     echo 检测到虚拟环境
+    SET PYTHON=python
 )
 
 echo 激活虚拟环境...
