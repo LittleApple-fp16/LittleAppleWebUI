@@ -8,6 +8,7 @@ import random
 import json
 import glob
 import numpy
+import argparse
 from get_pixiv_ref_token import get_ref_token
 from typing import Literal, cast
 from tqdm import tqdm
@@ -504,6 +505,10 @@ def pre_rating_limit(rating):
     return updates
 
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--port, type=int, default=7860")
+args = parser.parse_args()
+
 # 主界面
 with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
     output_cache = []
@@ -684,4 +689,4 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
     iblock.title = "小苹果webui"
 
 if __name__ == "__main__":
-    iblock.launch()
+    iblock.launch(server_port=args.port)
