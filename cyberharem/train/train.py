@@ -41,7 +41,7 @@ def train_plora(
         else:
             name = name or get_ch_name(ch)
 
-        dataset_size = len(glob.glob(os.path.join(ds_dir, '*.png')))
+        dataset_size = len(glob.glob(os.path.join(ds_dir, '*.png')) + glob.glob(os.path.join(ds_dir, '*.jpg')))
         logging.info(f'{plural_word(dataset_size, "image")} found in dataset.')
 
         actual_steps = epochs * dataset_size
