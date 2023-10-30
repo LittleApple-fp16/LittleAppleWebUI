@@ -14,12 +14,12 @@ there are something interesting there :)
 * Python 3.10.6
 * Dependencies will be installed on first start.
 * If there are something broken, delete `venv`.
-* It is recommended to change the torch version according to the cuda version before installation.
+* No torch version in requirements, you need install it manually.
 ```shell
-git clone [repo]
+git clone https://github.com/LittleApple-fp16/LittleAppleWebUI.git
 ```
 ## Usage
-soon
+start webui.bat
 
 ## Other
 * I don't understand Python, and I can't guarantee too much functionality for this. However, if there are any issues with UI usage, you can let me know.
