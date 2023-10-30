@@ -506,7 +506,7 @@ def pre_rating_limit(rating):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--port, type=int, default=7860")
+parser.add_argument("--port", type=int, default=7860)
 args = parser.parse_args()
 
 # 主界面
