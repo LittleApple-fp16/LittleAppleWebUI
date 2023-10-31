@@ -98,14 +98,14 @@ def has_image(got_list):
         return False
 
 
-def clustering(dataset_name):
+def clustering(dataset_name, thre):
     global output_cache
     images = dataset_getImg(dataset_name)[0]
     # print(clusters)
     clustered_imgs = []
     added_clusters = set()  # 创建一个集合 其中存储已经添加过的标签 此集合将约束被过滤的img列表 集合中的元素无法dup
     # print(" - 差分过滤开始处理")
-    for i, cluster in enumerate(tqdm(lpips_clustering(images), file=sys.stdout, desc=" - 差分过滤开始处理", ascii="░▒█")):  # 聚类方法 -1表示noise，与sklearn中的相同
+    for i, cluster in enumerate(tqdm(lpips_clustering(images, thre), file=sys.stdout, desc=" - 差分过滤开始处理", ascii="░▒█")):  # 聚类方法 -1表示noise，与sklearn中的相同
         if cluster == -1:
             clustered_imgs.append(images[i])
         elif cluster not in added_clusters:
@@ -547,6 +547,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
         with gr.Accordion("三阶分割"):
             stage_button = gr.Button("开始处理", variant="primary")
         with gr.Accordion("差分过滤"):
+            cluster_threshold = gr.Slider(0, 1, label="阈值", interactive=True)
             cluster_button = gr.Button("开始处理", variant="primary")
             with gr.Accordion("使用说明", open=False):
                 gr.Markdown("差分检测：LPIPS（感知图像补丁相似性） ，全称为Learned Perceptual Image Patch "
@@ -675,7 +676,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
     drop_ref_button.click(ref_customList, [], [drop_custom_list])
     convert_ref_button.click(ref_runs, [dataset_dropdown], [convert_step])
     convert_weights_button.click(convert_weights, [dataset_dropdown, convert_step], [message_output])
-    cluster_button.click(clustering, [dataset_dropdown], [message_output], scroll_to_output=True)
+    cluster_button.click(clustering, [dataset_dropdown, cluster_threshold], [message_output], scroll_to_output=True)
     seg_button.click(img_segment, [dataset_dropdown, seg_scale], [message_output], scroll_to_output=True)
     # ccip_button.click(person_detect, [dataset_dropdown, ccip_level, ccip_model, ccip_infer, ccip_conf, ccip_iou], [message_output])
     faced_button.click(face_detect, [dataset_dropdown, faced_level, faced_model, faced_infer, faced_conf, faced_iou], [message_output], scroll_to_output=True)
