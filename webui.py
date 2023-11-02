@@ -550,7 +550,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
         with gr.Accordion("三阶分割"):
             stage_button = gr.Button("开始处理", variant="primary")
         with gr.Accordion("差分过滤"):
-            cluster_threshold = gr.Slider(0, 1, label="阈值", interactive=True)
+            cluster_threshold = gr.Slider(0, 1, label="阈值", step=0.1, interactive=True)
             cluster_button = gr.Button("开始处理", variant="primary")
             with gr.Accordion("使用说明", open=False):
                 gr.Markdown("差分检测：LPIPS（感知图像补丁相似性） ，全称为Learned Perceptual Image Patch "
@@ -658,6 +658,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
         drop_use_presets.select(custom_blacklist_ctrl, None, [drop_custom_setting])
     with gr.Tab("PLoRA训练"):
         min_step = gr.Textbox(label="最小步数", value='', placeholder='不填写将自动计算')
+        batch_size = gr.Slider(1, 64, label="Batch Size", value=4, step=1)
         train_button = gr.Button("开始训练", variant="primary")
         with gr.Accordion("权重合并", open=True):
             with gr.Column(elem_id="convert_lora_steps") as convert_lora_steps:
@@ -684,7 +685,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
     # ccip_button.click(person_detect, [dataset_dropdown, ccip_level, ccip_model, ccip_infer, ccip_conf, ccip_iou], [message_output])
     faced_button.click(face_detect, [dataset_dropdown, faced_level, faced_model, faced_infer, faced_conf, faced_iou], [message_output], scroll_to_output=True)
     headd_button.click(head_detect, [dataset_dropdown, headd_level, headd_infer, headd_conf, headd_iou], [message_output], scroll_to_output=True)
-    train_button.click(run_train_plora, [dataset_dropdown, dataset_dropdown, min_step], [message_output], scroll_to_output=True)
+    train_button.click(run_train_plora, [dataset_dropdown, dataset_dropdown, min_step, batch_size], [message_output], scroll_to_output=True)
     areaf_button.click(area_fill, [dataset_dropdown, areaf_isRandom, areaf_color], [message_output], scroll_to_output=True)
     crop_hw_button.click(crop_hw, [dataset_dropdown], [message_output], scroll_to_output=True)
     crop_trans_button.click(crop_trans, [dataset_dropdown, crop_trans_thre, crop_trans_filter], [message_output], scroll_to_output=True)
