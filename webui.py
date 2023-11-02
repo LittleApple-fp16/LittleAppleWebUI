@@ -69,7 +69,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
     )[:num_images].export(  # 只下载前num_images张图片
         SaveExporter(save_path)  # 将图片保存到指定路径
     )
-    print(ratings_to_filter)
+    # print(ratings_to_filter)
     output_cache = []
     return "已将获取图片保存至" + save_path
 
@@ -392,7 +392,7 @@ def saving_output(dataset_name):
 def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_character_thre, wd14_weight, wd14_overlap, ml_real_name, ml_thre, ml_scale, ml_weight, ml_ratio, ml_overlap, need_black, drop_presets, drop_custom, exists_txt, del_json):
     global output_cache
     images = dataset_getImg(dataset_name)[0]
-    img_name = images[1]
+    img_name = dataset_getImg(dataset_name)[1]
     result = []
     if ttype == taggers[0]:
         # print(" - 数据打标开始处理")
@@ -400,10 +400,13 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
             result = get_wd14_tags(img, wd14_tagger, wd14_general_thre, wd14_character_thre, wd14_overlap)
             if result[2]:
                 result = tags_to_text(result[1], include_score=wd14_weight)+', '+tags_to_text(result[2], include_score=wd14_weight)  # features and chars
+            else:
+                result = tags_to_text(result[1], include_score=wd14_weight)
             if need_black:
+                # print(result)
                 result = str(str(drop_blacklisted_tags([result], drop_presets, drop_custom))[2:-2])
             if result:
-                name = name.replace(".txt", "")
+                name = name.replace(".txt", "").replace(".jpg", "").replace(".png", "").replace(".jpeg", "")
                 if os.path.isfile(f'dataset/{dataset_name}/{name}.txt'):
                     if exists_txt == "复制文件":
                         os.rename(f'dataset/{dataset_name}/{name}.txt', f'{dataset_name}/{name}_backup.txt')

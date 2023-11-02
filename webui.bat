@@ -16,7 +16,10 @@ SET PYTHON=%userinput%
     pip install --upgrade pip
     pip install python==3.10.6
     pip install -r requirements.txt
-    echo 完成
+    echo 完成，请手动安装pytorch
+    echo 安装命令 pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
+    pause
+    exit /b
 ) else (
     echo 检测到虚拟环境
     SET PYTHON=python
@@ -24,6 +27,8 @@ SET PYTHON=%userinput%
 
 echo 激活虚拟环境...
 call %VENV_NAME%\Scripts\activate.bat
+echo 自动更新...
+git pull
 echo 启动webui...
 %PYTHON% webui.py %*
 pause
