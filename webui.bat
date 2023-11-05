@@ -3,19 +3,21 @@
 SET VENV_NAME=venv
 
 if not exist %VENV_NAME% (
-set /p userinput=请输入一个3.10.6版本的python路径，如果你的环境已经是3.10.6，输入python:
+set /p userinput=请输入一个>=3.10.6版本的python路径，如果当前环境变量已经满足，直接回车:
 if "%userinput%"=="" (
     set userinput=python
 )
 SET PYTHON=%userinput%
     echo 正在创建虚拟环境...
     echo 依赖源推荐aliyun
-    python -m venv %VENV_NAME%
+    %PYTHON% -m venv %VENV_NAME%
     call %VENV_NAME%\Scripts\activate.bat
     echo 正在安装依赖...
-    pip install --upgrade pip
+    python -m pip install --upgrade pip
     pip install -r requirements.txt
-    echo 完成，请手动安装pytorch
+    echo 完成，请手动安装pytorch：
+    echo 请打开environment.bat运行torch的安装
+    echo torch的安装需要良好网络连接
     echo 安装命令 pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
     pause
     exit /b
