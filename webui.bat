@@ -31,6 +31,6 @@ call %VENV_NAME%\Scripts\activate.bat
 echo 自动更新...
 git pull
 echo 启动webui...
-%PYTHON% webui.py --port=7680 %*
+%PYTHON% webui.py --port=7862 %*
 pause
 exit /b
