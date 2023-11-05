@@ -13,9 +13,9 @@ from get_pixiv_ref_token import get_ref_token
 from typing import Literal, cast
 from tqdm import tqdm
 from tqdm.contrib import tzip
-from waifuc.action import HeadCountAction, AlignMinSizeAction, CCIPAction, ThreeStageSplitAction, ModeConvertAction, ClassFilterAction, PersonSplitAction, TaggingAction, RatingFilterAction, NoMonochromeAction
-from waifuc.export import SaveExporter
-from waifuc.source import DanbooruSource, PixivSearchSource, ZerochanSource, LocalSource
+from waifuc.action import HeadCountAction, AlignMinSizeAction, CCIPAction, ThreeStageSplitAction, ModeConvertAction, ClassFilterAction, PersonSplitAction, TaggingAction, RatingFilterAction, NoMonochromeAction, RandomFilenameAction
+from waifuc.export import SaveExporter, TextualInversionExporter
+from waifuc.source import DanbooruSource, PixivSearchSource, ZerochanSource, LocalSource, GcharAutoSource
 from PIL import Image
 from train import run_train_plora
 from imgutils.data import load_image, load_images, rgb_encode, rgb_decode
@@ -33,6 +33,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
     global output_cache
     character_name = character_name.replace(' ', '_')  # 将空格替换为下划线
     save_path = 'dataset/' + character_name
+    actions = []
     print("\n - 开始获取数据集")
     if source_type == 'Danbooru':
         source_init = DanbooruSource([character_name, 'solo'])
@@ -42,9 +43,12 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
             no_ai=p_ai,
             refresh_token=ptoken
         )
-        source_init.attach(CCIPAction(source_init))  # 用于过滤pixiv传回的不相关角色图像
+        actions.append(CCIPAction())  # 用于过滤pixiv传回的不相关角色图像
     elif source_type == 'Zerochan':
         source_init = ZerochanSource([character_name, 'solo'])
+    elif source_type == 'Auto':
+        source_init = GcharAutoSource(character_name, pixiv_refresh_token=ptoken)
+        actions.append(CCIPAction())
     else:
         output_cache = []
         return "图站错误"
@@ -54,20 +58,21 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
 
     if p_class:
         if 0 in p_class:
-            source_init.attach(NoMonochromeAction())
+            actions.append(NoMonochromeAction())
         class_to_filter = set(class_map.values()) - set([class_map[i] for i in p_class if i in class_map])
-        source_init.attach(ClassFilterAction(cast(list[Literal['illustration', 2: 'bangumi']], list(ratings_to_filter))), RatingFilterAction(cast(list[Literal['safe', 'r15', 'r18']], list(class_to_filter))))  # 过滤具有评级的图片
+        actions.append(ClassFilterAction(cast(list[Literal['illustration', 2: 'bangumi']], list(ratings_to_filter))))  # 过滤具有评级的图片
+        actions.append(RatingFilterAction(cast(list[Literal['safe', 'r15', 'r18']], list(class_to_filter))))
     if p_crop_person:
-        source_init.attach(PersonSplitAction())
+        actions.append(PersonSplitAction())
     if p_auto_tagging:
-        source_init.attach(TaggingAction(force=True))
-    source_init.attach(
-        AlignMinSizeAction(int(p_min_size)),
-        ModeConvertAction('RGB', p_background),
-
-        HeadCountAction(1),  # 只保留一头的图片
-    )[:num_images].export(  # 只下载前num_images张图片
-        SaveExporter(save_path)  # 将图片保存到指定路径
+        actions.append(TaggingAction(force=True))
+    if p_min_size:
+        actions.append(AlignMinSizeAction(int(p_min_size)))
+    actions.append(ModeConvertAction('RGB', p_background))
+    actions.append(HeadCountAction(1))
+    actions.append(RandomFilenameAction(ext='.png'))
+    source_init.attach(*actions)[:num_images].export(  # 只下载前num_images张图片
+        TextualInversionExporter(save_path)  # 将图片保存到指定路径
     )
     # print(ratings_to_filter)
     output_cache = []
@@ -345,7 +350,7 @@ def custom_blacklist_ctrl(evt: gr.SelectData):
 
 
 def pixiv_setting_ctrl(evt: gr.SelectData):
-    if evt.index == 1:
+    if evt.index == 1 or evt.index == 3:
         update = {globals()[f"pixiv_settings"]: gr.update(visible=True)}
     else:
         update = {globals()[f"pixiv_settings"]: gr.update(visible=False)}
@@ -520,14 +525,14 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
         dataset_dropdown = gr.Dropdown(ref_datasets(True), label="当前数据集", value=ref_datasets(True)[0], container=True, show_label=True, interactive=True, elem_id='dataset_dropbar')
         ref_datasets_button = gr.Button("🔄", elem_id='refresh_datasets')
     with gr.Tab("数据集获取"):
-        source = gr.Radio(['Danbooru', 'Pixiv', 'Zerochan'], label='选择图站', value='Danbooru')
+        source = gr.Radio(['Danbooru', 'Pixiv', 'Zerochan', 'Auto'], label='选择图站', value='Auto')
         char_name = gr.Textbox(label='角色名称', value='', placeholder='填入角色名')
-        pre_min_size = gr.Textbox(label="最小尺寸", value="600", interactive=False)
-        pre_background = gr.ColorPicker(label="背景色", value="#FFFFFF", interactive=False)
-        pre_class = gr.CheckboxGroup(["素描", "漫画", "3D"], label="风格过滤", value=None, type="index", interactive=False)
-        pre_rating = gr.CheckboxGroup(["健全", "r15", "r18"], label="评级过滤", value=["健全"], type="index", interactive=False)
-        pre_crop_person = gr.Checkbox(label="裁剪人物", value=False, interactive=False)
-        pre_auto_tagging = gr.Checkbox(label="自动打标", value=False, interactive=False)
+        pre_min_size = gr.Textbox(label="最小尺寸", value="600", interactive=True)
+        pre_background = gr.ColorPicker(label="背景色", value="#FFFFFF", interactive=True)
+        pre_class = gr.CheckboxGroup(["素描", "漫画", "3D"], label="风格过滤", value=None, type="index", interactive=True)
+        pre_rating = gr.CheckboxGroup(["健全", "r15", "r18"], label="评级过滤", value=["健全"], type="index", interactive=True)
+        pre_crop_person = gr.Checkbox(label="裁剪人物", value=False, interactive=True)
+        pre_auto_tagging = gr.Checkbox(label="自动打标", value=False, interactive=True)
         with gr.Column(visible=False) as pixiv_settings:
             pixiv_no_ai = gr.Checkbox(label="非AI生成", interactive=True, value=False)
             pixiv_token = gr.Textbox(label="刷新令牌", placeholder="必须: pixiv的refresh token", interactive=True)
