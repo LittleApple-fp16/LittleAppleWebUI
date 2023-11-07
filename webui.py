@@ -24,6 +24,7 @@ from imgutils.metrics import ccip_difference, ccip_clustering, lpips_clustering
 from imgutils.operate import censor_areas, squeeze, squeeze_with_transparency
 from imgutils.detect import detect_faces, detect_heads, detection_visualize, detect_person
 from imgutils.segment import segment_rgba_with_isnetis
+from imgutils.ocr import detect_text_with_ocr
 from cyberharem.publish.convert import convert_to_webui_lora
 
 matplotlib.use('Agg')
@@ -60,17 +61,19 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
         if 0 in p_class:
             actions.append(NoMonochromeAction())
         class_to_filter = set(class_map.values()) - set([class_map[i] for i in p_class if i in class_map])
-        actions.append(ClassFilterAction(cast(list[Literal['illustration', 2: 'bangumi']], list(ratings_to_filter))))  # 过滤具有评级的图片
-        actions.append(RatingFilterAction(cast(list[Literal['safe', 'r15', 'r18']], list(class_to_filter))))
+        actions.append(ClassFilterAction(cast(list[Literal['illustration', 2: 'bangumi']], list(class_to_filter))))  # 过滤具有评级的图片
     if p_crop_person:
         actions.append(PersonSplitAction())
     if p_auto_tagging:
         actions.append(TaggingAction(force=True))
     if p_min_size:
-        actions.append(AlignMinSizeAction(int(p_min_size)))
+        # print(int(p_min_size))
+        actions.append(AlignMinSizeAction(min_size=int(p_min_size)))
     actions.append(ModeConvertAction('RGB', p_background))
     actions.append(HeadCountAction(1))
-    actions.append(RandomFilenameAction(ext='.png'))
+    # actions.append(RandomFilenameAction(ext='.png'))
+    # print(cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter)))
+    actions.append(RatingFilterAction(ratings=cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter))))
     source_init.attach(*actions)[:num_images].export(  # 只下载前num_images张图片
         TextualInversionExporter(save_path)  # 将图片保存到指定路径
     )
@@ -180,6 +183,16 @@ def head_detect(dataset_name, level, max_infer_size, conf_threshold, iou_thresho
     return detected
 
 
+def text_detect(dataset_name):
+    global output_cache
+    images = dataset_getImg(dataset_name)[0]
+    detected = []
+    for img in tqdm(images, file=sys.stdout, ascii="░▒█", desc=" - 文本检测开始处理"):
+        detected.append(detect_text_with_ocr(img))
+    output_cache = detected
+    return detected
+
+
 def area_fill(dataset_name, is_random, color):
     global output_cache
     area = output_cache
@@ -198,6 +211,17 @@ def area_fill(dataset_name, is_random, color):
     output_cache = fill
     return fill
 
+
+def area_blur(dataset_name, rad):
+    global output_cache
+    area = output_cache
+    images = dataset_getImg(dataset_name)[0]
+    blur = []
+    for img, xyxy in tzip(images, area, file=sys.stdout, ascii="░▒█", desc=" - 区域填充开始处理"):
+        xyxy = xyxy[0]
+        blur.append(censor_areas(img, 'blur', [xyxy[0]], radius=rad))
+    output_cache = blur
+    return blur
 
 def crop_hw(dataset_name):
     global output_cache
@@ -603,6 +627,12 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
                             "来自imgutils检测模块"
                             "###此功能会返回一个区域结果，而不是图片结果")
             headd_button = gr.Button("开始检测", variant="primary")
+        with gr.Accordion("文本检测"):
+            with gr.Accordion("使用说明", open=False):
+                gr.Markdown("##文本检测"
+                            "用ocr的方式检测文本的模块"
+                            "###此功能会返回一个区域结果，而不是图片结果")
+            textd_button = gr.Button("开始检测", variant="primary")
         with gr.Accordion("区域填充"):
             areaf_isRandom = gr.Checkbox(label="随机颜色", value=True, interactive=True)
             areaf_color = gr.ColorPicker(label="自定义颜色", value="#00FF00", visible=not areaf_isRandom.value)
@@ -611,6 +641,12 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
                 gr.Markdown("接收输出后的结果进行打码。\n"
                             "运行结果内有区域信息，才可以填充...")
             areaf_isRandom.select(color_picker_ctrl, None, [areaf_color])
+        with gr.Accordion("区域模糊"):
+            areab_radius = gr.Slider(1, 20, label="模糊强度", value=4, interactive=True, step=1)
+            areab_button = gr.Button("开始处理", variant="primary")
+            with gr.Accordion("使用说明", open=False):
+                gr.Markdown("接收输出后的结果进行打码。\n"
+                            "运行结果内有区域信息，才可以模糊...")
         with gr.Accordion("区域剪裁"):
             crop_hw_button = gr.Button("开始处理", variant="primary")
             with gr.Accordion("使用说明", open=False):
@@ -690,8 +726,10 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
     # ccip_button.click(person_detect, [dataset_dropdown, ccip_level, ccip_model, ccip_infer, ccip_conf, ccip_iou], [message_output])
     faced_button.click(face_detect, [dataset_dropdown, faced_level, faced_model, faced_infer, faced_conf, faced_iou], [message_output], scroll_to_output=True)
     headd_button.click(head_detect, [dataset_dropdown, headd_level, headd_infer, headd_conf, headd_iou], [message_output], scroll_to_output=True)
+    textd_button.click(text_detect, [dataset_dropdown], [message_output], scroll_to_output=True)
     train_button.click(run_train_plora, [dataset_dropdown, dataset_dropdown, min_step, batch_size], [message_output], scroll_to_output=True)
     areaf_button.click(area_fill, [dataset_dropdown, areaf_isRandom, areaf_color], [message_output], scroll_to_output=True)
+    areab_button.click(area_blur, [dataset_dropdown, areab_radius], [message_output], scroll_to_output=True)
     crop_hw_button.click(crop_hw, [dataset_dropdown], [message_output], scroll_to_output=True)
     crop_trans_button.click(crop_trans, [dataset_dropdown, crop_trans_thre, crop_trans_filter], [message_output], scroll_to_output=True)
     tagger_button.click(tagging_main, [dataset_dropdown, tagger_type, wd14_tagger_model, wd14_general_threshold, wd14_character_threshold, wd14_format_weight, wd14_drop_overlap, ml_use_real_name, ml_threshold, ml_size, ml_format_weight, ml_keep_ratio, ml_drop_overlap, use_blacklist, drop_use_presets, drop_custom_list, op_exists_txt, anal_del_json], [message_output], scroll_to_output=True)
