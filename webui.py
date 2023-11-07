@@ -71,7 +71,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
         actions.append(AlignMinSizeAction(min_size=int(p_min_size)))
     actions.append(ModeConvertAction('RGB', p_background))
     actions.append(HeadCountAction(1))
-    # actions.append(RandomFilenameAction(ext='.png'))
+    actions.append(RandomFilenameAction(ext='.png'))
     # print(cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter)))
     actions.append(RatingFilterAction(ratings=cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter))))
     source_init.attach(*actions)[:num_images].export(  # 只下载前num_images张图片
