@@ -132,7 +132,7 @@ def three_stage(dataset_name):
     local_source = LocalSource(f"dataset/{dataset_name}")
     local_source.attach(
         ThreeStageSplitAction(),
-    ).export(SaveExporter(process_dir, True))
+    ).export(TextualInversionExporter(process_dir, True))
     output_cache = []
     return "已保存至"+process_dir+"文件夹"
 
@@ -198,13 +198,16 @@ def area_fill(dataset_name, is_random, color):
     area = output_cache
     images = dataset_getImg(dataset_name)[0]
     fill = []
+    xyxy = []
     # print(" - 区域填充开始处理")
-    for img, xyxy in tzip(images, area, file=sys.stdout, ascii="░▒█", desc=" - 区域填充开始处理"):
-        xyxy = xyxy[0]
+    for img, xyxys in tzip(images, area, file=sys.stdout, ascii="░▒█", desc=" - 区域填充开始处理"):
+        if xyxys:
+            for exy in [xyxys][0]:
+                xyxy.append(exy[0])
         if is_random:
             color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-        # print(img, eval(area), xyxy, xyxy[0][0])
-        fill.append(censor_areas(img, 'color', [xyxy[0]], color=color))  # [xyxy[0][0]]
+        # print(img, eval(area), xyxys, xyxys[0][0])
+        fill.append(censor_areas(img, 'color', xyxy, color=color))  # [xyxys[0][0]]
     # os.makedirs(f"processed/{dataset_name}", exist_ok=True)
     # for i, sv in enumerate(fill):
     #     sv.save(f"processed/{dataset_name}/{dataset_name}_AreaFill_{i+1}.png")
@@ -217,9 +220,12 @@ def area_blur(dataset_name, rad):
     area = output_cache
     images = dataset_getImg(dataset_name)[0]
     blur = []
-    for img, xyxy in tzip(images, area, file=sys.stdout, ascii="░▒█", desc=" - 区域模糊开始处理"):
-        if xyxy:
-            blur.append(censor_areas(img, 'blur', [xyxy[0][0]], radius=rad))
+    xyxy = []
+    for img, xyxys in tzip(images, area, file=sys.stdout, ascii="░▒█", desc=" - 区域模糊开始处理"):
+        if xyxys:
+            for exy in [xyxys][0]:
+                xyxy.append(exy[0])
+            blur.append(censor_areas(img, 'blur', xyxy, radius=rad))
         else:
             blur.append(img)
     output_cache = blur
@@ -232,21 +238,23 @@ def crop_hw(dataset_name):
     images = dataset_getImg(dataset_name)[0]
     result = []
     for img, infos in zip(images, mask_info):
-        infos = infos[0]
-        (x0, y0, x1, y1) = infos[0]
-        detect_type = infos[1]
-        # score = infos[2]
-        img_array = numpy.array(rgb_encode(img))
-        h, w = img_array.shape[1:]
-        mask = numpy.zeros((h, w))
-        # print(mask, h, w)
-        if detect_type == 'face' or detect_type == 'head':
-            mask[y0:y1, x0:x1] = 1
-            # print(mask)
-        else:
-            output_cache = []
-            return "此内容不支持剪裁"
-        result.append(squeeze(img, mask))
+        # infos = infos[0]
+        print(infos)
+        for einfo in infos:
+            (x0, y0, x1, y1) = einfo[0]
+            detect_type = einfo[1]
+            # score = infos[2]
+            img_array = numpy.array(rgb_encode(img))
+            h, w = img_array.shape[1:]
+            mask = numpy.zeros((h, w))
+            # print(mask, h, w)
+            if detect_type == 'face' or detect_type == 'head' or detect_type == 'text':
+                mask[y0:y1, x0:x1] = 1
+                # print(mask)
+            else:
+                output_cache = []
+                return "此内容不支持剪裁"
+            result.append(squeeze(img, mask))
     output_cache = result
     return result
 
