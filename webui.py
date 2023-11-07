@@ -84,11 +84,11 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
 
 def dataset_getImg(dataset_name):  # 请确保每个方法中只调用一次 由于tqdm
     global output_cache
-    # print(" - 开始加载图像")
+    print(" - 加载数据集图像...")
     dataset_path = "dataset/" + dataset_name
     images = []
     img_name = []
-    for filename in tqdm(os.listdir(dataset_path), file=sys.stdout, desc=" - 开始加载图像"):
+    for filename in os.listdir(dataset_path):
         if filename.endswith(('.png', '.jpg', '.jpeg')):
             img = Image.open(os.path.join(dataset_path, filename))
             if img is not None:
@@ -217,11 +217,14 @@ def area_blur(dataset_name, rad):
     area = output_cache
     images = dataset_getImg(dataset_name)[0]
     blur = []
-    for img, xyxy in tzip(images, area, file=sys.stdout, ascii="░▒█", desc=" - 区域填充开始处理"):
-        xyxy = xyxy[0]
-        blur.append(censor_areas(img, 'blur', [xyxy[0]], radius=rad))
+    for img, xyxy in tzip(images, area, file=sys.stdout, ascii="░▒█", desc=" - 区域模糊开始处理"):
+        if xyxy:
+            blur.append(censor_areas(img, 'blur', [xyxy[0][0]], radius=rad))
+        else:
+            blur.append(img)
     output_cache = blur
     return blur
+
 
 def crop_hw(dataset_name):
     global output_cache
