@@ -554,6 +554,7 @@ def pre_rating_limit(rating):
 parser = argparse.ArgumentParser()
 parser.add_argument("--host", type=str, default="127.0.0.1")
 parser.add_argument("--port", type=int, default=7862)
+parser.add_argument("--share", type=bool, default=False)
 args = parser.parse_args()
 
 # 主界面
@@ -755,4 +756,4 @@ if __name__ == "__main__":
     # log.info(f"Server started at http://{args.host}:{args.port}")
     if sys.platform == "win32":
         webbrowser.open(f"http://{args.host}:{args.port}")
-    iblock.launch(server_port=args.port, server_name=args.host)
+    iblock.launch(server_port=args.port, server_name=args.host, share=args.share)
