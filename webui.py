@@ -9,7 +9,9 @@ import json
 import glob
 import numpy
 import argparse
-from get_pixiv_ref_token import get_ref_token
+import webbrowser
+from littleapple.log import log
+from littleapple.get_pixiv_ref_token import get_ref_token
 from typing import Literal, cast
 from tqdm import tqdm
 from tqdm.contrib import tzip
@@ -56,6 +58,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
     rating_map = {0: 'safe', 1: 'r15', 2: 'r18'}
     class_map = {1: 'illustration', 2: 'bangumi'}
     ratings_to_filter = set(rating_map.values()) - set([rating_map[i] for i in p_rating if i in rating_map])
+    # ratings_to_filter = set([rating_map[i] for i in p_rating if i in rating_map])
 
     if p_class:
         if 0 in p_class:
@@ -549,7 +552,8 @@ def pre_rating_limit(rating):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--port", type=int, default=7860)
+parser.add_argument("--host", type=str, default="127.0.0.1")
+parser.add_argument("--port", type=int, default=7862)
 args = parser.parse_args()
 
 # 主界面
@@ -748,4 +752,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
     iblock.title = "小苹果webui"
 
 if __name__ == "__main__":
-    iblock.launch(server_port=args.port)
+    # log.info(f"Server started at http://{args.host}:{args.port}")
+    if sys.platform == "win32":
+        webbrowser.open(f"http://{args.host}:{args.port}")
+    iblock.launch(server_port=args.port, server_name=args.host)
