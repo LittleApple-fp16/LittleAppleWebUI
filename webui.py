@@ -565,7 +565,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
         dataset_dropdown = gr.Dropdown(ref_datasets(True), label="当前数据集", value=ref_datasets(True)[0], container=True, show_label=True, interactive=True, elem_id='dataset_dropbar')
         ref_datasets_button = gr.Button("🔄", elem_id='refresh_datasets')
     with gr.Tab("数据集获取"):
-        source = gr.Radio(['Danbooru', 'Pixiv', 'Zerochan', 'Auto'], label='选择图站', value='Auto')
+        source = gr.Radio(['Danbooru', 'Pixiv', 'Zerochan', 'Auto'], label='选择图站', value='Danbooru')
         char_name = gr.Textbox(label='角色名称', value='', placeholder='填入角色名')
         pre_min_size = gr.Textbox(label="最小尺寸", value="600", interactive=True)
         pre_background = gr.ColorPicker(label="背景色", value="#FFFFFF", interactive=True)
