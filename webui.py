@@ -77,7 +77,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
     actions.append(RandomFilenameAction(ext='.png'))
     # print(cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter)))
     actions.append(RatingFilterAction(ratings=cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter))))
-    source_init.attach(*actions)[:num_images].export(  # 只下载前num_images张图片
+    source_init.attach(*actions)[:int(num_images)].export(  # 只下载前num_images张图片
         TextualInversionExporter(save_path)  # 将图片保存到指定路径
     )
     # print(ratings_to_filter)
@@ -584,7 +584,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
                             "复制`code=`后的内容，填入后台（黑窗口）按回车，后台将返回你的refresh token\n"
                             "取消获取请按ctrl+c")
         source.select(pixiv_setting_ctrl, None, [pixiv_settings])
-        dl_count = gr.Slider(1, 100, label='下载数量', value=10, step=1)
+        dl_count = gr.Textbox(label='下载数量', value='10')
         # save_path = gr.Textbox(label='保存路径', value='dataset', placeholder='自动创建子文件夹')
         download_button = gr.Button("获取图片", variant="primary", interactive=True)
         with gr.Accordion("使用说明", open=False):
