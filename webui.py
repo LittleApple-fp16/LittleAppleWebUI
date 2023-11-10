@@ -715,6 +715,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
         drop_use_presets.select(custom_blacklist_ctrl, None, [drop_custom_setting])
     with gr.Tab("PLoRA训练"):
         min_step = gr.Textbox(label="最小步数", value='', placeholder='不填写将自动计算')
+        epoch = gr.Textbox(label="Epoch", value='', placeholder="不填写将自动计算")
         batch_size = gr.Slider(1, 64, label="Batch Size", value=4, step=1)
         train_button = gr.Button("开始训练", variant="primary")
         with gr.Accordion("权重合并", open=True):
@@ -743,7 +744,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
     faced_button.click(face_detect, [dataset_dropdown, faced_level, faced_model, faced_infer, faced_conf, faced_iou], [message_output], scroll_to_output=True)
     headd_button.click(head_detect, [dataset_dropdown, headd_level, headd_infer, headd_conf, headd_iou], [message_output], scroll_to_output=True)
     textd_button.click(text_detect, [dataset_dropdown], [message_output], scroll_to_output=True)
-    train_button.click(run_train_plora, [dataset_dropdown, dataset_dropdown, min_step, batch_size], [message_output], scroll_to_output=True)
+    train_button.click(run_train_plora, [dataset_dropdown, dataset_dropdown, min_step, batch_size, epoch], [message_output], scroll_to_output=True)
     areaf_button.click(area_fill, [dataset_dropdown, areaf_isRandom, areaf_color], [message_output], scroll_to_output=True)
     areab_button.click(area_blur, [dataset_dropdown, areab_radius], [message_output], scroll_to_output=True)
     crop_hw_button.click(crop_hw, [dataset_dropdown], [message_output], scroll_to_output=True)
