@@ -715,7 +715,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
         drop_use_presets.select(custom_blacklist_ctrl, None, [drop_custom_setting])
     with gr.Tab("PLoRA训练"):
         min_step = gr.Textbox(label="最小步数", value='', placeholder='不填写将自动计算')
-        epoch = gr.Textbox(label="Epoch", value='', placeholder="不填写将自动计算")
+        epoch = gr.Slider(1, 100, label="Epoch", value=10)
         batch_size = gr.Slider(1, 64, label="Batch Size", value=4, step=1)
         train_button = gr.Button("开始训练", variant="primary")
         with gr.Accordion("权重合并", open=True):

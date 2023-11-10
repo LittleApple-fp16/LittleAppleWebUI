@@ -9,11 +9,10 @@ def run_train_plora(dataset_name, charname, min_step, bs, epoc):
         'name': charname,
         'batch_size': bs,
         'workdir': 'runs/' + dataset_name,
+        'epochs': int(epoc),
     }
     if min_step:
         params['min_steps'] = int(min_step)
-    if epoc:
-        params['epochs'] = int(epoc)
     train_plora(**params)
 
 
