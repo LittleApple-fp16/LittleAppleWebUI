@@ -2,7 +2,7 @@ import os.path
 
 import requests
 import re
-from bs4 import BeautifulSoup
+# from bs4 import BeautifulSoup
 
 
 def get_image_links(user_id):
