@@ -1,6 +1,8 @@
 import io
 import logging
 import sys
+import time
+
 import matplotlib
 import os
 import gradio as gr
@@ -10,9 +12,10 @@ import glob
 import numpy
 import argparse
 import webbrowser
-from littleapple.log import log
-from littleapple.get_pixiv_ref_token import get_ref_token
+from littleapple.refresh_token import get_ref_token
+from littleapple.image_link import get_image_links, download_link
 from typing import Literal, cast
+from pixivpy3 import AppPixivAPI, PixivError
 from tqdm import tqdm
 from tqdm.contrib import tzip
 from waifuc.action import HeadCountAction, AlignMinSizeAction, CCIPAction, ThreeStageSplitAction, ModeConvertAction, ClassFilterAction, PersonSplitAction, TaggingAction, RatingFilterAction, NoMonochromeAction, RandomFilenameAction
@@ -32,57 +35,61 @@ from cyberharem.publish.convert import convert_to_webui_lora
 matplotlib.use('Agg')
 
 
-def download_images(source_type, character_name, p_min_size, p_background, p_class, p_rating, p_crop_person, p_auto_tagging, num_images, ptoken, p_ai):
+def download_images(source_type, character_name, p_min_size, p_background, p_class, p_rating, p_crop_person, p_auto_tagging, num_images, p_ai):
     global output_cache
-    character_name = character_name.replace(' ', '_')  # 将空格替换为下划线
-    save_path = 'dataset/' + character_name
     actions = []
-    print("\n - 开始获取数据集")
-    if source_type == 'Danbooru':
-        source_init = DanbooruSource([character_name, 'solo'])
-    elif source_type == 'Pixiv':
-        source_init = PixivSearchSource(
-            character_name,
-            no_ai=p_ai,
-            refresh_token=ptoken
-        )
-        actions.append(CCIPAction())  # 用于过滤pixiv传回的不相关角色图像
-    elif source_type == 'Zerochan':
-        source_init = ZerochanSource([character_name, 'solo'])
-    elif source_type == 'Auto':
-        source_init = GcharAutoSource(character_name, pixiv_refresh_token=ptoken)
-        actions.append(CCIPAction())
-    else:
-        output_cache = []
-        return "图站错误"
     rating_map = {0: 'safe', 1: 'r15', 2: 'r18'}
     class_map = {1: 'illustration', 2: 'bangumi'}
     ratings_to_filter = set(rating_map.values()) - set([rating_map[i] for i in p_rating if i in rating_map])
     # ratings_to_filter = set([rating_map[i] for i in p_rating if i in rating_map])
-
-    if p_class:
-        if 0 in p_class:
-            actions.append(NoMonochromeAction())
-        class_to_filter = set(class_map.values()) - set([class_map[i] for i in p_class if i in class_map])
-        actions.append(ClassFilterAction(cast(list[Literal['illustration', 2: 'bangumi']], list(class_to_filter))))  # 过滤具有评级的图片
-    if p_crop_person:
-        actions.append(PersonSplitAction())
-    if p_auto_tagging:
-        actions.append(TaggingAction(force=True))
-    if p_min_size:
-        # print(int(p_min_size))
-        actions.append(AlignMinSizeAction(min_size=int(p_min_size)))
-    actions.append(ModeConvertAction('RGB', p_background))
-    actions.append(HeadCountAction(1))
-    actions.append(RandomFilenameAction(ext='.png'))
-    # print(cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter)))
-    actions.append(RatingFilterAction(ratings=cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter))))
-    source_init.attach(*actions)[:int(num_images)].export(  # 只下载前num_images张图片
-        TextualInversionExporter(save_path)  # 将图片保存到指定路径
-    )
-    # print(ratings_to_filter)
+    print("\n - 开始获取数据集")
+    character_list = character_name.split(',')
+    for character in character_list:
+        character = character.replace(' ', '_')  # 将空格替换为下划线
+        save_path = 'dataset/' + character
+        if source_type == 'Danbooru':
+            source_init = DanbooruSource([character, 'solo'])
+        elif source_type == 'Pixiv':
+            if not cfg.get('pixiv_token', ''):
+                return "Pixiv访问令牌未设置"
+            source_init = PixivSearchSource(
+                character,
+                no_ai=p_ai,
+                refresh_token=cfg.get('pixiv_token', '')
+            )
+            actions.append(CCIPAction())  # 用于过滤pixiv传回的不相关角色图像
+        elif source_type == 'Zerochan':
+            source_init = ZerochanSource([character, 'solo'])
+        elif source_type == '自动':
+            source_init = GcharAutoSource(character, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+            actions.append(CCIPAction())
+        else:
+            output_cache = []
+            return "图站错误"
+        if p_class:
+            if 0 in p_class:
+                actions.append(NoMonochromeAction())
+            # class_to_filter = set(class_map.values()) - set([class_map[i] for i in p_class if i in class_map])
+            class_to_filter = set([class_map[i] for i in p_class if i in class_map])
+            actions.append(ClassFilterAction(cast(list[Literal['illustration', 2: 'bangumi']], list(class_to_filter))))  # 过滤具有评级的图片
+        if p_crop_person:
+            actions.append(PersonSplitAction())
+        if p_auto_tagging:
+            actions.append(TaggingAction(force=True))
+        if p_min_size:
+            # print(int(p_min_size))
+            actions.append(AlignMinSizeAction(min_size=int(p_min_size)))
+        actions.append(ModeConvertAction('RGB', p_background))
+        actions.append(HeadCountAction(1))
+        actions.append(RandomFilenameAction(ext='.png'))
+        # print(cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter)))
+        actions.append(RatingFilterAction(ratings=cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter))))
+        source_init.attach(*actions)[:int(num_images)].export(  # 只下载前num_images张图片
+            TextualInversionExporter(save_path)  # 将图片保存到指定路径
+        )
+        # print(ratings_to_filter)
     output_cache = []
-    return "已将获取图片保存至" + save_path
+    return "已获取图片"
 
 
 def dataset_getImg(dataset_name):  # 请确保每个方法中只调用一次 由于tqdm
@@ -100,6 +107,26 @@ def dataset_getImg(dataset_name):  # 请确保每个方法中只调用一次 由
     # output_cache = images
     images = load_images(images)
     return images, img_name
+
+
+def download_illust(i_name):
+    # get_image_links()
+    global pyapi
+    try:
+        json_result = pyapi.search_user(i_name)
+        # print(json_result)
+        illust = json_result.user_previews[0].illusts[0]
+        # print(illust)
+        links = get_image_links(illust['user']['id'])
+        # print(links)
+        for url, name in tzip(links[0], links[1], file=sys.stdout, ascii="░▒█", desc=" - 数据集获取开始处理"):
+            if not os.path.exists(f"dataset/{illust['user']['name']}"):
+                os.makedirs(f"dataset/{illust['user']['name']}")
+            download_link(url, f"dataset/{illust['user']['name']}/{name}.png")
+        # print(">>> %s, origin url: %s" % (illust.title, illust.image_urls['large']))
+        return "已获取"+illust['user']['name']+"画师数据集"
+    except PixivError:
+        print("[错误] - 获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须输入正确的画师名")
 
 
 def has_image(got_list):
@@ -388,7 +415,7 @@ def custom_blacklist_ctrl(evt: gr.SelectData):
 
 
 def pixiv_setting_ctrl(evt: gr.SelectData):
-    if evt.index == 1 or evt.index == 3:
+    if evt.index == 1:
         update = {globals()[f"pixiv_settings"]: gr.update(visible=True)}
     else:
         update = {globals()[f"pixiv_settings"]: gr.update(visible=False)}
@@ -551,6 +578,43 @@ def pre_rating_limit(rating):
     return updates
 
 
+def save_settings(settings):
+    global cfg
+    cfg['pixiv_token'] = settings
+    with open('config.json', 'w') as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=4)
+    load_settings()
+    # 刷新设置页面
+    return "已保存设置"
+
+
+def load_settings():
+    global cfg
+    if os.path.getsize('config.json') > 0:  # 检查文件是否为空
+        with open('config.json', 'r') as config:
+            cfg = json.load(config)
+    else:
+        cfg = {}
+
+
+def pixiv_login():
+    global pyapi
+    global cfg
+    pyapi = AppPixivAPI()
+    for _ in range(3):
+        try:
+            pyapi.auth(refresh_token=cfg.get('pixiv_token', ''))
+            print("[信息] - Pixiv已登陆")
+            break
+        except PixivError:
+            time.sleep(10)
+        if not cfg.get('pixiv_token', ''):
+            print("[警告] - Pixiv登陆失败，因为没有设置访问令牌")
+            break
+    else:
+        print("[警告] - Pixiv登陆失败，已尝试三次，请前往设置检查刷新令牌，并尝试重新登陆")
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--host", type=str, default="127.0.0.1")
 parser.add_argument("--port", type=int, default=7862)
@@ -559,43 +623,48 @@ args = parser.parse_args()
 
 # 主界面
 with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
+    # 读取配置文件
+    global cfg
+    # cfg = {}
+    load_settings()
+    # 登陆pixiv
+    global pyapi
+    pixiv_login()
     output_cache = []
     quicksettings = gr.Row(elem_id="quicksettings")
     with quicksettings:
         dataset_dropdown = gr.Dropdown(ref_datasets(True), label="当前数据集", value=ref_datasets(True)[0], container=True, show_label=True, interactive=True, elem_id='dataset_dropbar')
         ref_datasets_button = gr.Button("🔄", elem_id='refresh_datasets')
-    with gr.Tab("数据集获取"):
-        source = gr.Radio(['Danbooru', 'Pixiv', 'Zerochan', 'Auto'], label='选择图站', value='Danbooru')
-        char_name = gr.Textbox(label='角色名称', value='', placeholder='填入角色名')
-        pre_min_size = gr.Textbox(label="最小尺寸", value="600", interactive=True)
-        pre_background = gr.ColorPicker(label="背景色", value="#FFFFFF", interactive=True)
-        pre_class = gr.CheckboxGroup(["素描", "漫画", "3D"], label="风格过滤", value=None, type="index", interactive=True)
-        pre_rating = gr.CheckboxGroup(["健全", "r15", "r18"], label="评级过滤", value=["健全"], type="index", interactive=True)
-        pre_crop_person = gr.Checkbox(label="裁剪人物", value=False, interactive=True)
-        pre_auto_tagging = gr.Checkbox(label="自动打标", value=False, interactive=True)
-        with gr.Column(visible=False) as pixiv_settings:
-            pixiv_no_ai = gr.Checkbox(label="非AI生成", interactive=True, value=False)
-            pixiv_token = gr.Textbox(label="刷新令牌", placeholder="必须: pixiv的refresh token", interactive=True)
-            pixiv_get_token = gr.Button("前往查询", interactive=True)
-            with gr.Accordion("令牌说明", open=False):
-                gr.Markdown("获取Pixiv图片需要刷新令牌\n"
-                            "用法：点击`前往获取`，将打开Pixiv网页，按F12启用开发者控制台，选择`网络/Network`，点击左侧第三个按钮`筛选器`，"
-                            "筛选`callback?`点击继续使用此账号登陆，此时页面会跳转，开发者控制台会出现一条请求，点击它，进入`标头`"
-                            "复制`code=`后的内容，填入后台（黑窗口）按回车，后台将返回你的refresh token\n"
-                            "取消获取请按ctrl+c")
-        source.select(pixiv_setting_ctrl, None, [pixiv_settings])
-        dl_count = gr.Textbox(label='下载数量', value='10')
-        # save_path = gr.Textbox(label='保存路径', value='dataset', placeholder='自动创建子文件夹')
-        download_button = gr.Button("获取图片", variant="primary", interactive=True)
-        with gr.Accordion("使用说明", open=False):
-            gr.Markdown("数据集详细说明..什么的")
-        pre_rating.change(pre_rating_limit, [pre_rating], [download_button])
-        pixiv_get_token.click(get_ref_token, [], [])
-    with gr.Tab("数据集处理"):
+    with gr.Tab("数据获取"):
+        with gr.Tab("图站"):
+            source = gr.Radio(['Danbooru', 'Pixiv', 'Zerochan', '自动'], label='选择图站', value='Danbooru')
+            char_name = gr.Textbox(label='角色名称', value='', placeholder='填入角色名')
+            pre_min_size = gr.Textbox(label="最小尺寸", value="600", interactive=True)
+            pre_background = gr.ColorPicker(label="背景色", value="#FFFFFF", interactive=True)
+            pre_class = gr.CheckboxGroup(["素描", "漫画", "3D"], label="风格过滤", value=None, type="index", interactive=True)
+            pre_rating = gr.CheckboxGroup(["健全", "r15", "r18"], label="评级过滤", value=["健全"], type="index", interactive=True)
+            pre_crop_person = gr.Checkbox(label="裁剪人物", value=False, interactive=True)
+            pre_auto_tagging = gr.Checkbox(label="自动打标", value=False, interactive=True)
+            with gr.Column(visible=False) as pixiv_settings:
+                pixiv_no_ai = gr.Checkbox(label="非AI生成", interactive=True, value=False)
+            source.select(pixiv_setting_ctrl, None, [pixiv_settings])
+            dl_count = gr.Textbox(label="下载数量", value='10', placeholder="无上限")
+            # dl_count = gr.Slider(1, 1001, step=1, value=10, label="下载数量", elem_id='dl_count')
+            # save_path = gr.Textbox(label='保存路径', value='dataset', placeholder='自动创建子文件夹')
+            download_button = gr.Button("获取图片", variant="primary", interactive=True)
+            with gr.Accordion("使用说明", open=False):
+                gr.Markdown("数据集详细说明..什么的")
+            pre_rating.change(pre_rating_limit, [pre_rating], [download_button])
+        with gr.Tab("画师"):
+            illu_name = gr.Textbox(label="画师名", placeholder="完整画师名")
+            illu_button = gr.Button("获取全部作品", variant="primary")
+            with gr.Accordion("使用说明", open=False):
+                gr.Markdown("仅支持pixiv 目前")
+    with gr.Tab("数据增强"):
         with gr.Accordion("三阶分割"):
             stage_button = gr.Button("开始处理", variant="primary")
         with gr.Accordion("差分过滤"):
-            cluster_threshold = gr.Slider(0, 1, label="阈值", step=0.1, interactive=True)
+            cluster_threshold = gr.Slider(0, 1, label="阈值", step=0.1, value=0.45, interactive=True)
             cluster_button = gr.Button("开始处理", variant="primary")
             with gr.Accordion("使用说明", open=False):
                 gr.Markdown("差分检测：LPIPS（感知图像补丁相似性） ，全称为Learned Perceptual Image Patch "
@@ -728,11 +797,30 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
     with gr.Tab("质量验证"):
         with gr.Accordion("使用说明", open=False):
             gr.Markdown("soon...")
+    with gr.Tab("设置"):
+        pixiv_token = gr.Textbox(label="刷新令牌", placeholder="不填写将无法访问Pixiv", interactive=True, value=cfg.get('pixiv_token', ''))
+        pixiv_get_token = gr.Button("前往查询", interactive=True)
+        with gr.Accordion("令牌说明", open=False):
+            gr.Markdown("获取Pixiv图片需要刷新令牌\n"
+                        "用法：点击`前往获取`，将打开Pixiv网页，按F12启用开发者控制台，选择`网络/Network`，点击左侧第三个按钮`筛选器`，"
+                        "筛选`callback?`点击继续使用此账号登陆，此时页面会跳转，开发者控制台会出现一条请求，点击它，进入`标头`"
+                        "复制`code=`后的内容，填入后台（黑窗口）按回车，后台将返回你的refresh token\n"
+                        "打开webui时会尝试登陆一次，如果失败请尝试下方登陆按钮，需要先填写刷新令牌并保存\n"
+                        "取消获取请在后台按ctrl+c")
+        # settings_list = [pixiv_token]
+        pixiv_manual_login = gr.Button("尝试登陆", interactive=True)
+        setting_save_button = gr.Button("保存", interactive=True, variant="primary")
+        with gr.Accordion("使用说明", open=False):
+            gr.Markdown("我只是个打酱油的...")
     with gr.Column(elem_id="output"):
         message_output = gr.Textbox(label='运行结果', elem_id="message_output")
         save_output = gr.Button("💾", elem_id="save_output", interactive=False)
         message_output.change(save_output_ctrl, [], save_output)
-    download_button.click(download_images, [source, char_name, pre_min_size, pre_background, pre_class, pre_rating, pre_crop_person, pre_auto_tagging, dl_count, pixiv_token, pixiv_no_ai], [message_output], scroll_to_output=True)
+    # dl_count.change(None, )
+    setting_save_button.click(save_settings, [pixiv_token], [message_output])
+    pixiv_manual_login.click(pixiv_login, [], [])
+    pixiv_get_token.click(get_ref_token, [], [])
+    download_button.click(download_images, [source, char_name, pre_min_size, pre_background, pre_class, pre_rating, pre_crop_person, pre_auto_tagging, dl_count, pixiv_no_ai], [message_output], scroll_to_output=True)
     ref_datasets_button.click(ref_datasets, [], [dataset_dropdown])
     stage_button.click(three_stage, [dataset_dropdown], [message_output])
     drop_ref_button.click(ref_customList, [], [drop_custom_list])
@@ -750,6 +838,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
     crop_hw_button.click(crop_hw, [dataset_dropdown], [message_output], scroll_to_output=True)
     crop_trans_button.click(crop_trans, [dataset_dropdown, crop_trans_thre, crop_trans_filter], [message_output], scroll_to_output=True)
     tagger_button.click(tagging_main, [dataset_dropdown, tagger_type, wd14_tagger_model, wd14_general_threshold, wd14_character_threshold, wd14_format_weight, wd14_drop_overlap, ml_use_real_name, ml_threshold, ml_size, ml_format_weight, ml_keep_ratio, ml_drop_overlap, use_blacklist, drop_use_presets, drop_custom_list, op_exists_txt, anal_del_json], [message_output], scroll_to_output=True)
+    illu_button.click(download_illust, [illu_name], [message_output], scroll_to_output=True)
     save_output.click(saving_output, [dataset_dropdown], [message_output])
     iblock.title = "小苹果webui"
 
