@@ -235,7 +235,9 @@ def area_fill(dataset_name, is_random, color):
             for exy in [xyxys][0]:
                 xyxy.append(exy[0])
         if is_random:
-            color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            color = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
+            color = random.choice(color)
+            # color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
         # print(img, eval(area), xyxys, xyxys[0][0])
         fill.append(censor_areas(img, 'color', xyxy, color=color))  # [xyxys[0][0]]
     # os.makedirs(f"processed/{dataset_name}", exist_ok=True)
