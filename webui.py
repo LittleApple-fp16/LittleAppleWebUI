@@ -604,15 +604,15 @@ def pixiv_login():
     for _ in range(3):
         try:
             pyapi.auth(refresh_token=cfg.get('pixiv_token', ''))
-            print("[信息] - Pixiv已登陆")
+            print("[信息] - Pixiv已登录")
             break
         except PixivError:
             time.sleep(10)
         if not cfg.get('pixiv_token', ''):
-            print("[警告] - Pixiv登陆失败，因为没有设置访问令牌")
+            print("[警告] - Pixiv登录失败，因为没有设置访问令牌")
             break
     else:
-        print("[警告] - Pixiv登陆失败，已尝试三次，请前往设置检查刷新令牌，并尝试重新登陆")
+        print("[警告] - Pixiv登录失败，已尝试三次，请前往设置检查刷新令牌，并尝试重新登录")
 
 
 parser = argparse.ArgumentParser()
@@ -627,7 +627,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
     global cfg
     # cfg = {}
     load_settings()
-    # 登陆pixiv
+    # 登录pixiv
     global pyapi
     pixiv_login()
     output_cache = []
@@ -653,7 +653,10 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
             # save_path = gr.Textbox(label='保存路径', value='dataset', placeholder='自动创建子文件夹')
             download_button = gr.Button("获取图片", variant="primary", interactive=True)
             with gr.Accordion("使用说明", open=False):
-                gr.Markdown("数据集详细说明..什么的")
+                gr.Markdown("对于单图站，填入要搜索的任何内容以获取对应标签图片\n"
+                            "对于自动图站源，必须填入一个角色名\n"
+                            "所有图站支持多内容顺序爬取，用半角逗号分隔，如\"铃兰,香风智乃\"\n"
+                            "保存的图片会以搜索内容自动生成一个数据集，获取完成后刷新数据集即可查看")
             pre_rating.change(pre_rating_limit, [pre_rating], [download_button])
         with gr.Tab("画师"):
             illu_name = gr.Textbox(label="画师名", placeholder="完整画师名")
@@ -714,9 +717,10 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
             headd_button = gr.Button("开始检测", variant="primary")
         with gr.Accordion("文本检测"):
             with gr.Accordion("使用说明", open=False):
-                gr.Markdown("##文本检测"
-                            "用ocr的方式检测文本的模块"
-                            "###此功能会返回一个区域结果，而不是图片结果")
+                gr.Markdown("文本检测\n"
+                            "用ocr的方式检测文本的模块\n"
+                            "此功能会返回一个区域结果，而不是图片结果\n"
+                            "此功能结果质量差，不建议使用")
             textd_button = gr.Button("开始检测", variant="primary")
         with gr.Accordion("区域填充"):
             areaf_isRandom = gr.Checkbox(label="随机颜色", value=True, interactive=True)
@@ -803,12 +807,13 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
         with gr.Accordion("令牌说明", open=False):
             gr.Markdown("获取Pixiv图片需要刷新令牌\n"
                         "用法：点击`前往获取`，将打开Pixiv网页，按F12启用开发者控制台，选择`网络/Network`，点击左侧第三个按钮`筛选器`，"
-                        "筛选`callback?`点击继续使用此账号登陆，此时页面会跳转，开发者控制台会出现一条请求，点击它，进入`标头`"
+                        "筛选`callback?`点击继续使用此账号登录，此时页面会跳转，开发者控制台会出现一条请求，点击它，进入`标头`"
                         "复制`code=`后的内容，填入后台（黑窗口）按回车，后台将返回你的refresh token\n"
-                        "打开webui时会尝试登陆一次，如果失败请尝试下方登陆按钮，需要先填写刷新令牌并保存\n"
-                        "取消获取请在后台按ctrl+c")
+                        "打开webui时会尝试自动登录，如果失败请尝试下方登录按钮，需要先填写刷新令牌并保存\n"
+                        "控制台中可以看到登录信息\n"
+                        "取消查询请在后台按ctrl+c")
         # settings_list = [pixiv_token]
-        pixiv_manual_login = gr.Button("尝试登陆", interactive=True)
+        pixiv_manual_login = gr.Button("尝试登录", interactive=True)
         setting_save_button = gr.Button("保存", interactive=True, variant="primary")
         with gr.Accordion("使用说明", open=False):
             gr.Markdown("我只是个打酱油的...")
