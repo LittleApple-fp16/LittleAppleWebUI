@@ -192,3 +192,6 @@ xmltodict==0.13.0
 yarl==1.9.2
 yattag==1.15.1
 zipp==3.17.0
+
+beautifulsoup4==4.12.2
+yt_dlp==2022.4.8
