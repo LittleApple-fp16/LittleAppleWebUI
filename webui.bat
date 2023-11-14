@@ -1,4 +1,6 @@
 @echo off
+@rem 为中文路径切换UNICODE模式...
+@chcp 65001>nul
 
 SET VENV_NAME=venv
 
@@ -12,6 +14,8 @@ SET PYTHON=%userinput%
     echo 依赖源推荐aliyun
     %PYTHON% -m venv %VENV_NAME%
     call %VENV_NAME%\Scripts\activate.bat
+    @rem 设置依赖路径到当前目录内...
+    @path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%
     echo 正在安装依赖...
     python -m pip install --upgrade pip
     pip install -r requirements.txt
@@ -25,6 +29,9 @@ SET PYTHON=%userinput%
     echo 检测到虚拟环境
     SET PYTHON=python
 )
+
+@rem 设置依赖路径到当前目录内...
+@path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%
 
 echo 激活虚拟环境...
 call %VENV_NAME%\Scripts\activate.bat

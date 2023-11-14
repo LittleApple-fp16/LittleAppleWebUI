@@ -1,36 +1,43 @@
 @echo off
+@rem ÎªÖĞÎÄÂ·¾¶ÇĞ»»UNICODEÄ£Ê½...
+@chcp 65001>nul
 
 SET VENV_NAME=venv
 
 if not exist %VENV_NAME% (
-set /p userinput=è¯·è¾“å…¥ä¸€ä¸ª>=3.10.6ç‰ˆæœ¬çš„pythonè·¯å¾„ï¼Œå¦‚æœå½“å‰ç¯å¢ƒå˜é‡å·²ç»æ»¡è¶³ï¼Œç›´æ¥å›è½¦:
+set /p userinput=ÇëÊäÈëÒ»¸ö>=3.10.6°æ±¾µÄpythonÂ·¾¶£¬Èç¹ûµ±Ç°»·¾³±äÁ¿ÒÑ¾­Âú×ã£¬Ö±½Ó»Ø³µ:
 if "%userinput%"=="" (
     set userinput=python
 )
 SET PYTHON=%userinput%
-    echo æ­£åœ¨åˆ›å»ºè™šæ‹Ÿç¯å¢ƒ...
-    echo ä¾èµ–æºæ¨èaliyun
+    echo ÕıÔÚ´´½¨ĞéÄâ»·¾³...
+    echo ÒÀÀµÔ´ÍÆ¼öaliyun
     %PYTHON% -m venv %VENV_NAME%
     call %VENV_NAME%\Scripts\activate.bat
-    echo æ­£åœ¨å®‰è£…ä¾èµ–...
+    @rem ÉèÖÃÒÀÀµÂ·¾¶µ½µ±Ç°Ä¿Â¼ÄÚ...
+    @path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%
+    echo ÕıÔÚ°²×°ÒÀÀµ...
     python -m pip install --upgrade pip
     pip install -r requirements.txt
-    echo å®Œæˆï¼Œè¯·æ‰‹åŠ¨å®‰è£…pytorchï¼š
-    echo è¯·æ‰“å¼€environment.batè¿è¡Œtorchçš„å®‰è£…
-    echo torchçš„å®‰è£…éœ€è¦è‰¯å¥½ç½‘ç»œè¿æ¥
-    echo å®‰è£…å‘½ä»¤ pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
+    echo Íê³É£¬ÇëÊÖ¶¯°²×°pytorch£º
+    echo Çë´ò¿ªenvironment.batÔËĞĞtorchµÄ°²×°
+    echo torchµÄ°²×°ĞèÒªÁ¼ºÃÍøÂçÁ¬½Ó
+    echo °²×°ÃüÁî pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
     pause
     exit /b
 ) else (
-    echo æ£€æµ‹åˆ°è™šæ‹Ÿç¯å¢ƒ
+    echo ¼ì²âµ½ĞéÄâ»·¾³
     SET PYTHON=python
 )
 
-echo æ¿€æ´»è™šæ‹Ÿç¯å¢ƒ...
+@rem ÉèÖÃÒÀÀµÂ·¾¶µ½µ±Ç°Ä¿Â¼ÄÚ...
+@path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%
+
+echo ¼¤»îĞéÄâ»·¾³...
 call %VENV_NAME%\Scripts\activate.bat
-echo è‡ªåŠ¨æ›´æ–°...
+echo ×Ô¶¯¸üĞÂ...
 git pull
-echo å¯åŠ¨webui...
+echo Æô¶¯webui...
 %PYTHON% webui.py --share %*
 pause
 exit /b
