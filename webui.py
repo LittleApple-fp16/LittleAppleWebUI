@@ -14,6 +14,8 @@ import argparse
 import webbrowser
 from littleapple.refresh_token import get_ref_token
 from littleapple.image_link import get_image_links, download_link
+from littleapple.kemono_dl.main import downloader as kemono_dl
+from littleapple.kemono_dl.args import get_args as kemono_args
 from typing import Literal, cast
 from pixivpy3 import AppPixivAPI, PixivError
 from tqdm import tqdm
@@ -109,7 +111,7 @@ def dataset_getImg(dataset_name):  # 请确保每个方法中只调用一次 由
     return images, img_name
 
 
-def download_illust(i_name):
+def download_illust(i_name, i_source):
     # get_image_links()
     global pyapi
     try:
@@ -119,14 +121,41 @@ def download_illust(i_name):
         # print(illust)
         links = get_image_links(illust['user']['id'])
         # print(links)
-        for url, name in tzip(links[0], links[1], file=sys.stdout, ascii="░▒█", desc=" - 数据集获取开始处理"):
-            if not os.path.exists(f"dataset/{illust['user']['name']}"):
-                os.makedirs(f"dataset/{illust['user']['name']}")
-            download_link(url, f"dataset/{illust['user']['name']}/{name}.png")
+        kemono_arg = kemono_args()
+    #     cookies = {
+    #     "domain": "kemono.su",
+    #     "expirationDate": "12345.67",
+    #     "hostOnly": "true",
+    #     "httpOnly": "true",
+    #     "name": "session",
+    #     "path": "/",
+    #     "sameSite": "unspecified",
+    #     "secure": "false",
+    #     "session": "false",
+    #     "storeId": "0",
+    #     "value": "xxx",
+    #     "id": "2"
+    # }
+    #     with open("cfgs/kemono_cookie.txt", "r") as f:
+    #         cookies = json.load(f)
+    #     kemono_arg["dirname_pattern"] = 'dataset\i_name\{service}\{username} [{user_id}]',
+        kemono_arg["cookies"] = {k: str(v) for k, v in json.loads(cfg['fanbox_cookie']).items()}
+        # print(kemono_arg["cookies"])
+        kemono_arg["links"] = ["https://kemono.su/fanbox/user/" + str(illust['user']['id'])]
+        kemono_arg["dirname_pattern"] = f"dataset/{i_name}"
+        # print(i_source)
+        if 0 in i_source:
+            for url, name in tzip(links[0], links[1], file=sys.stdout, ascii="░▒█", desc=" - 数据集获取开始处理"):
+                if not os.path.exists(f"dataset/{illust['user']['name']}"):
+                    os.makedirs(f"dataset/{illust['user']['name']}")
+                download_link(url, f"dataset/{illust['user']['name']}/{name}.png")
         # print(">>> %s, origin url: %s" % (illust.title, illust.image_urls['large']))
-        return "已获取"+illust['user']['name']+"画师数据集"
-    except PixivError:
-        print("[错误] - 获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须输入正确的画师名")
+        # return "已获取"+illust['user']['name']+"画师数据集"
+        if 1 in i_source:
+            kemono_dl(kemono_arg)
+    except:
+        print("[错误] - 获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须设置Kemono令牌才能获取Fanbox的内容\n你必须输入正确的画师名")
+        return "获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须设置Kemono令牌才能获取Fanbox的内容\n你必须输入正确的画师名"
 
 
 def has_image(got_list):
@@ -580,9 +609,20 @@ def pre_rating_limit(rating):
     return updates
 
 
-def save_settings(settings):
+# @gr.StateHandler
+def illu_source_limit(i_source):
+    updates = {}
+    if not i_source:
+        updates[illu_button] = gr.update(interactive=False)
+    else:
+        updates[illu_button] = gr.update(interactive=True)
+    return updates
+
+
+def save_settings(p_token, f_cookie):
     global cfg
-    cfg['pixiv_token'] = settings
+    cfg['pixiv_token'] = p_token
+    cfg['fanbox_cookie'] = f_cookie
     with open('config.json', 'w') as f:
         json.dump(cfg, f, ensure_ascii=False, indent=4)
     load_settings()
@@ -662,9 +702,15 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
             pre_rating.change(pre_rating_limit, [pre_rating], [download_button])
         with gr.Tab("画师"):
             illu_name = gr.Textbox(label="画师名", placeholder="完整画师名")
-            illu_button = gr.Button("获取全部作品", variant="primary")
+            with gr.Row():
+                # illu_get_pixiv = gr.Checkbox(label="Pixiv", value=True, interactive=True)
+                # illu_get_fanbox = gr.Checkbox(label="Fanbox", value=False, interactive=True)
+                illu_get_source = gr.CheckboxGroup(["Pixiv", "Fanbox"], label="获取渠道", value=["Pixiv"], type="index", interactive=True)
+            illu_button = gr.Button("获取作品", variant="primary")
             with gr.Accordion("使用说明", open=False):
-                gr.Markdown("仅支持pixiv 目前")
+                gr.Markdown("仅支持pixiv fanbox 目前\n"
+                            "关于完整画师名：要写画师在pixiv对应的名字，不可以写fanbox上的英文名")
+            illu_get_source.change(illu_source_limit, [illu_get_source], [illu_button])
     with gr.Tab("数据增强"):
         with gr.Accordion("三阶分割"):
             stage_button = gr.Button("开始处理", variant="primary")
@@ -804,18 +850,28 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
         with gr.Accordion("使用说明", open=False):
             gr.Markdown("soon...")
     with gr.Tab("设置"):
-        pixiv_token = gr.Textbox(label="刷新令牌", placeholder="不填写将无法访问Pixiv", interactive=True, value=cfg.get('pixiv_token', ''))
-        pixiv_get_token = gr.Button("前往查询", interactive=True)
-        with gr.Accordion("令牌说明", open=False):
-            gr.Markdown("获取Pixiv图片需要刷新令牌\n"
-                        "用法：点击`前往获取`，将打开Pixiv网页，按F12启用开发者控制台，选择`网络/Network`，点击左侧第三个按钮`筛选器`，"
-                        "筛选`callback?`点击继续使用此账号登录，此时页面会跳转，开发者控制台会出现一条请求，点击它，进入`标头`"
-                        "复制`code=`后的内容，填入后台（黑窗口）按回车，后台将返回你的refresh token\n"
-                        "打开webui时会尝试自动登录，如果失败请尝试下方登录按钮，需要先填写刷新令牌并保存\n"
-                        "控制台中可以看到登录信息\n"
-                        "取消查询请在后台按ctrl+c")
-        # settings_list = [pixiv_token]
-        pixiv_manual_login = gr.Button("尝试登录", interactive=True)
+        with gr.Tab("Pixiv"):
+            pixiv_token = gr.Textbox(label="刷新令牌", placeholder="不填写将无法访问Pixiv", interactive=True, value=cfg.get('pixiv_token', ''))
+            pixiv_get_token = gr.Button("前往查询", interactive=True)
+            with gr.Accordion("令牌说明", open=False):
+                gr.Markdown("获取Pixiv图片需要刷新令牌\n"
+                            "用法：点击`前往获取`，将打开Pixiv网页，按F12启用开发者控制台，选择`网络/Network`，点击左侧第三个按钮`筛选器`，"
+                            "筛选`callback?`点击继续使用此账号登录，此时页面会跳转，开发者控制台会出现一条请求，点击它，进入`标头`"
+                            "复制`code=`后的内容，填入后台（黑窗口）按回车，后台将返回你的refresh token\n"
+                            "打开webui时会尝试自动登录，如果失败请尝试下方登录按钮，需要先填写刷新令牌并保存\n"
+                            "控制台中可以看到登录信息\n"
+                            "取消查询请在后台按ctrl+c")
+            # settings_list = [pixiv_token]
+            pixiv_manual_login = gr.Button("尝试登录", interactive=True)
+        with gr.Tab("Fanbox"):
+            fanbox_cookie = gr.Textbox(label="Cookie", lines=13, placeholder="不填写将无法获取Fanbox内容", interactive=True, value=cfg.get('fanbox_cookie', ''))
+            fanbox_get_cookie = gr.Button("前往查询", interactive=True)
+            with gr.Accordion("Cookie说明", open=False):
+                gr.Markdown("获取Fanbox图片需要Kemono网站Cookie\n"
+                            "Cookie格式：{xxx}，名为session的cookie\n"
+                            "具体操作：使用EditThisCookie浏览器扩展\n"
+                            "进入Kemono网站，导出cookie，将cookie粘贴到设置中，删除第一项和第三项，\n"
+                            "删除[]大括号，只保留名为session的cookie{xxx}即可")
         setting_save_button = gr.Button("保存", interactive=True, variant="primary")
         with gr.Accordion("使用说明", open=False):
             gr.Markdown("我只是个打酱油的...")
@@ -824,7 +880,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
         save_output = gr.Button("💾", elem_id="save_output", interactive=False)
         message_output.change(save_output_ctrl, [], save_output)
     # dl_count.change(None, )
-    setting_save_button.click(save_settings, [pixiv_token], [message_output])
+    setting_save_button.click(save_settings, [pixiv_token, fanbox_cookie], [message_output])
     pixiv_manual_login.click(pixiv_login, [], [])
     pixiv_get_token.click(get_ref_token, [], [])
     download_button.click(download_images, [source, char_name, pre_min_size, pre_background, pre_class, pre_rating, pre_crop_person, pre_auto_tagging, dl_count, pixiv_no_ai], [message_output], scroll_to_output=True)
@@ -845,7 +901,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
     crop_hw_button.click(crop_hw, [dataset_dropdown], [message_output], scroll_to_output=True)
     crop_trans_button.click(crop_trans, [dataset_dropdown, crop_trans_thre, crop_trans_filter], [message_output], scroll_to_output=True)
     tagger_button.click(tagging_main, [dataset_dropdown, tagger_type, wd14_tagger_model, wd14_general_threshold, wd14_character_threshold, wd14_format_weight, wd14_drop_overlap, ml_use_real_name, ml_threshold, ml_size, ml_format_weight, ml_keep_ratio, ml_drop_overlap, use_blacklist, drop_use_presets, drop_custom_list, op_exists_txt, anal_del_json], [message_output], scroll_to_output=True)
-    illu_button.click(download_illust, [illu_name], [message_output], scroll_to_output=True)
+    illu_button.click(download_illust, [illu_name, illu_get_source], [message_output], scroll_to_output=True)
     save_output.click(saving_output, [dataset_dropdown], [message_output])
     iblock.title = "小苹果webui"
 
