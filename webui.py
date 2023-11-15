@@ -158,6 +158,10 @@ def download_illust(i_name, i_source):
         return "获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须设置Kemono令牌才能获取Fanbox的内容\n你必须输入正确的画师名"
 
 
+def get_fanbox_cookie():
+    webbrowser.open(f"https://kemono.su/account/login")
+
+
 def has_image(got_list):
     if any(isinstance(item, Image.Image) for item in got_list):
         return True
@@ -883,6 +887,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
     setting_save_button.click(save_settings, [pixiv_token, fanbox_cookie], [message_output])
     pixiv_manual_login.click(pixiv_login, [], [])
     pixiv_get_token.click(get_ref_token, [], [])
+    fanbox_get_cookie.click(get_fanbox_cookie, [], [])
     download_button.click(download_images, [source, char_name, pre_min_size, pre_background, pre_class, pre_rating, pre_crop_person, pre_auto_tagging, dl_count, pixiv_no_ai], [message_output], scroll_to_output=True)
     ref_datasets_button.click(ref_datasets, [], [dataset_dropdown])
     stage_button.click(three_stage, [dataset_dropdown], [message_output])
