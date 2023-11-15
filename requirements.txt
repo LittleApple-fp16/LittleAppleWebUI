@@ -181,7 +181,6 @@ urllib3==2.0.7
 URLObject==2.4.3
 uvicorn==0.23.2
 virtualenv==20.24.5
-waifuc @ git+https://github.com/deepghs/waifuc.git@ff7c32f74bd2ba4cb5fe980814fa611b674e9df3
 wandb==0.15.12
 websockets==11.0.3
 Werkzeug==3.0.0
