@@ -47,6 +47,8 @@ class WebDataSource(RootDataSource):
                 except NotADirectoryError:
                     os.remove(td)
                     continue
+                finally:
+                    td.cleanup()
 
                 meta = {**meta, 'url': url}
                 yield ImageItem(image, meta)
