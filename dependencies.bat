@@ -1,11 +1,13 @@
 @echo off
 
+@title=ÒÀÀµ°²×°
 SET VENV_NAME=venv
-@rem è®¾ç½®ä¾èµ–è·¯å¾„åˆ°å½“å‰ç›®å½•å†…...
-@path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%
-echo æ¿€æ´»è™šæ‹Ÿç¯å¢ƒ...
+@rem ÉèÖÃÒÀÀµÂ·¾¶µ½µ±Ç°Ä¿Â¼ÄÚ...
+set "path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%"
+echo ¼¤»îĞéÄâ»·¾³...
 call %VENV_NAME%\Scripts\activate.bat
-echo æ­£åœ¨å°è¯•æ›´æ–°ä¾èµ–
+echo ÕıÔÚ³¢ÊÔ¸üĞÂÒÀÀµ
 pip install -r requirements.txt
+echo ÒÀÀµ¸üĞÂÍê³É
 pause
 exit /b

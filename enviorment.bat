@@ -1,6 +1,7 @@
-@rem 璁剧疆渚濊禆璺緞鍒板綋鍓嶇洰褰曞唴...
-@path=%cd%\venv\scripts;%cd%\venv\dep\python;%cd%\venv\dep\python\scripts;%cd%\venv\dep\git\bin;%cd%;%path%
+@rem 设置依赖路径到当前目录内...
+@set "path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%"
 
+@title=环境命令行
 @if not defined PROMPT set PROMPT=$P$G
 @set PROMPT=(venv) %PROMPT%
 @cmd /k
