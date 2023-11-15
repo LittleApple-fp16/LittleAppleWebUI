@@ -22,7 +22,6 @@ from tqdm import tqdm
 from tqdm.contrib import tzip
 from waifuc.action import HeadCountAction, AlignMinSizeAction, CCIPAction, ThreeStageSplitAction, ModeConvertAction, ClassFilterAction, PersonSplitAction, TaggingAction, RatingFilterAction, NoMonochromeAction, RandomFilenameAction
 from waifuc.export import SaveExporter, TextualInversionExporter
-from littleapple.waifuc_overwrite import AppleTextualInversionExporter
 from waifuc.source import DanbooruSource, PixivSearchSource, ZerochanSource, LocalSource, GcharAutoSource
 from PIL import Image
 from train import run_train_plora
@@ -88,7 +87,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
         # print(cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter)))
         actions.append(RatingFilterAction(ratings=cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter))))
         source_init.attach(*actions)[:int(num_images)].export(  # 只下载前num_images张图片
-            AppleTextualInversionExporter(save_path)  # 将图片保存到指定路径
+            TextualInversionExporter(save_path)  # 将图片保存到指定路径
         )
         # print(ratings_to_filter)
     output_cache = []
