@@ -162,6 +162,43 @@ def get_fanbox_cookie():
     webbrowser.open(f"https://kemono.su/account/login")
 
 
+global danbooru_fast_settings
+
+
+# def get_danbooru_fast(tags):
+#     batches = tags.split("|")
+#     global danbooru_fast_settings
+#
+#     for i, batch in enumerate(batches):
+#         # settings = DanbooruSpider.settings
+#         danbooru_fast_settings = {
+#             'assistant': "danbooru_crawler",
+#             'SEARCH_KEYS': "group_sex+doggystyle",
+#             'SPIDER_MODULES': ["danbooru_crawler.spiders"],
+#             'NEWSPIDER_MODULE': "danbooru_crawler.spiders",
+#             'ROBOTSTXT_OBEY': False,
+#             'REQUEST_FINGERPRINTER_IMPLEMENTATION': "2.7",
+#             'TWISTED_REACTOR': "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
+#             'FEED_EXPORT_ENCODING': "utf-8",
+#             'CONCURRENT_REQUESTS': 32,
+#             'DOWNLOAD_DELAY': 1,
+#             'ITEM_PIPELINES': {'scrapy.pipelines.images.ImagesPipeline': 1},
+#             'IMAGES_STORE': '../dataset/test',  # 设置图片存储路径
+#         }
+#         name = batch.replace(" ", "_")
+#         danbooru_fast_settings['IMAGES_STORE'] = f'../dataset/{name}'
+#         tag = name.replace(",", "+")
+#         danbooru_fast_settings['SEARCH_KEYS'] = tag
+#         with open('tmp.bin', 'wb') as tmp:
+#             pickle.dump(danbooru_fast_settings, tmp)
+#         # execute(["scrapy", "crawl", "danbooru"])
+#         # process = multiprocessing.Process(target=CrawlerProcess(danbooru_fast_settings))
+#         # process.crawl(DanbooruSpider.DanbooruSpider, tag=tag)
+#         # process.start()
+#         # reactor.run()
+#         DanbooruSpider.__main__()
+
+
 def has_image(got_list):
     if any(isinstance(item, Image.Image) for item in got_list):
         return True
@@ -676,6 +713,9 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
     # 登录pixiv
     global pyapi
     pixiv_login()
+    # 清空临时文件
+    with open('tmp.bin', 'w') as tmp:
+        pass
     output_cache = []
     quicksettings = gr.Row(elem_id="quicksettings")
     with quicksettings:
@@ -715,6 +755,9 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
                 gr.Markdown("仅支持pixiv fanbox 目前\n"
                             "关于完整画师名：要写画师在pixiv对应的名字，不可以写fanbox上的英文名")
             illu_get_source.change(illu_source_limit, [illu_get_source], [illu_button])
+        # with gr.Tab("快速获取"):
+        #     fast_tag = gr.Textbox(label="Tag", placeholder="aaa,bbb|ccc,ddd", value='')
+        #     fast_button = gr.Button("开始获取", variant="primary", interactive=True)
     with gr.Tab("数据增强"):
         with gr.Accordion("三阶分割"):
             stage_button = gr.Button("开始处理", variant="primary")
@@ -888,6 +931,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
     pixiv_manual_login.click(pixiv_login, [], [])
     pixiv_get_token.click(get_ref_token, [], [])
     fanbox_get_cookie.click(get_fanbox_cookie, [], [])
+    # fast_button.click(get_danbooru_fast, [fast_tag], [])
     download_button.click(download_images, [source, char_name, pre_min_size, pre_background, pre_class, pre_rating, pre_crop_person, pre_auto_tagging, dl_count, pixiv_no_ai], [message_output], scroll_to_output=True)
     ref_datasets_button.click(ref_datasets, [], [dataset_dropdown])
     stage_button.click(three_stage, [dataset_dropdown], [message_output])
