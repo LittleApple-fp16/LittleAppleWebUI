@@ -212,6 +212,7 @@ def has_image(got_list):
 
 async def illu_getter(pic):
     global cfg
+    global output_cache
     if cfg.get('proxie_enabled', False):
         proxies = cfg.get('proxie_ip', None)
     else:
@@ -227,8 +228,10 @@ async def illu_getter(pic):
                 selected = i
                 break
         if selected is None:
+            output_cache = []
             return "未找到", ""
         else:
+            output_cache = []
             return selected.author + " (" + selected.author_url + ") " + "的作品:" + selected.title, selected.author
 
 
@@ -994,5 +997,5 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
 if __name__ == "__main__":
     # log.info(f"Server started at http://{args.host}:{args.port}")
     if sys.platform == "win32":
-        webbrowser.open(f"http://{args.host}:{args.port}" + ("?__theme=dark" if cfg.get('theme', '亮色') == '黑色' else ""))
+        webbrowser.open(f"http://127.0.0.1:{args.port}" + ("?__theme=dark" if cfg.get('theme', '亮色') == '黑色' else ""))
     iblock.launch(server_port=args.port, server_name=args.host, share=args.share)

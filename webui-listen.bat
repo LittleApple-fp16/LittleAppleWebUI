@@ -36,6 +36,6 @@ call %VENV_NAME%\Scripts\activate.bat
 echo 自动更新...
 git pull
 echo 启动webui...
-%PYTHON% webui.py --share %*
+%PYTHON% webui.py --host 0.0.0.0 %*
 pause
 exit /b
