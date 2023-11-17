@@ -12,6 +12,10 @@ import glob
 import numpy
 import argparse
 import webbrowser
+import asyncio
+from loguru import logger
+from PicImageSearch.model import Ascii2DResponse
+from PicImageSearch import Ascii2D, Network
 from littleapple.refresh_token import get_ref_token
 from littleapple.image_link import get_image_links, download_link
 from littleapple.kemono_dl.main import downloader as kemono_dl
@@ -204,6 +208,29 @@ def has_image(got_list):
         return True
     else:
         return False
+
+
+async def illu_getter(pic):
+    global cfg
+    if cfg.get('proxie_enabled', False):
+        proxies = cfg.get('proxie_ip', None)
+    else:
+        proxies = None
+    async with Network(proxies=proxies, verify_ssl=True) as client:
+        ascii2d = Ascii2D(
+            client=client, bovw=False
+        )
+        resp = await ascii2d.search(file=pic)
+        selected = None
+        for i in resp.raw:
+            if i.author_url.startswith("https://www.pixiv.net/users/"):
+                selected = i
+                break
+        if selected is None:
+            return "未找到", ""
+        else:
+            return selected.author + " (" + selected.author_url + ") " + "的作品:" + selected.title, selected.author
+
 
 
 def clustering(dataset_name, thre):
@@ -660,10 +687,14 @@ def illu_source_limit(i_source):
     return updates
 
 
-def save_settings(p_token, f_cookie):
+def save_settings(p_token, f_cookie, pro_ip, pro_host, pro_enabled, theme):
     global cfg
     cfg['pixiv_token'] = p_token
     cfg['fanbox_cookie'] = f_cookie
+    cfg['proxie_ip'] = pro_ip
+    cfg['proxie_host'] = pro_host
+    cfg['proxie_enabled'] = pro_enabled
+    cfg['theme'] = theme
     with open('config.json', 'w') as f:
         json.dump(cfg, f, ensure_ascii=False, indent=4)
     load_settings()
@@ -704,19 +735,16 @@ parser.add_argument("--port", type=int, default=7862)
 parser.add_argument("--share", type=bool, default=False)
 args = parser.parse_args()
 
+# 读取配置文件
+global cfg
+# cfg = {}
+load_settings()
+# 登录pixiv
+global pyapi
+pixiv_login()
+output_cache = []
 # 主界面
 with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
-    # 读取配置文件
-    global cfg
-    # cfg = {}
-    load_settings()
-    # 登录pixiv
-    global pyapi
-    pixiv_login()
-    # 清空临时文件
-    with open('tmp.bin', 'w') as tmp:
-        pass
-    output_cache = []
     quicksettings = gr.Row(elem_id="quicksettings")
     with quicksettings:
         dataset_dropdown = gr.Dropdown(ref_datasets(True), label="当前数据集", value=ref_datasets(True)[0], container=True, show_label=True, interactive=True, elem_id='dataset_dropbar')
@@ -755,6 +783,8 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
                 gr.Markdown("仅支持pixiv fanbox 目前\n"
                             "关于完整画师名：要写画师在pixiv对应的名字，不可以写fanbox上的英文名")
             illu_get_source.change(illu_source_limit, [illu_get_source], [illu_button])
+            illu_getter_pic = gr.Image(type="filepath", label="到底是哪个画师?")
+            illu_getter_button = gr.Button("获取画师名", interactive=True)
         # with gr.Tab("快速获取"):
         #     fast_tag = gr.Textbox(label="Tag", placeholder="aaa,bbb|ccc,ddd", value='')
         #     fast_button = gr.Button("开始获取", variant="primary", interactive=True)
@@ -919,6 +949,12 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
                             "具体操作：使用EditThisCookie浏览器扩展\n"
                             "进入Kemono网站，导出cookie，将cookie粘贴到设置中，删除第一项和第三项，\n"
                             "删除[]大括号，只保留名为session的cookie{xxx}即可")
+        with gr.Tab("代理服务器"):
+            proxie_ip = gr.Textbox(label="代理IP地址", placeholder="代理软件的IP地址", value=cfg.get('proxie_ip', ''))
+            proxie_host = gr.Textbox(label="代理端口", placeholder="代理软件中的端口", value=cfg.get('proxie_host', ''))
+            proxie_enabled = gr.Checkbox(label="启用代理", interactive=True, value=cfg.get('proxie_enabled', False))
+        with gr.Tab("界面设置"):
+            theme_select = gr.Dropdown(['亮色', '黑色'], label="主题颜色", interactive=True, info="需要重启", value=cfg.get('theme', '亮色'))
         setting_save_button = gr.Button("保存", interactive=True, variant="primary")
         with gr.Accordion("使用说明", open=False):
             gr.Markdown("我只是个打酱油的...")
@@ -927,11 +963,12 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
         save_output = gr.Button("💾", elem_id="save_output", interactive=False)
         message_output.change(save_output_ctrl, [], save_output)
     # dl_count.change(None, )
-    setting_save_button.click(save_settings, [pixiv_token, fanbox_cookie], [message_output])
+    setting_save_button.click(save_settings, [pixiv_token, fanbox_cookie, proxie_ip, proxie_host, proxie_enabled, theme_select], [message_output])
     pixiv_manual_login.click(pixiv_login, [], [])
     pixiv_get_token.click(get_ref_token, [], [])
     fanbox_get_cookie.click(get_fanbox_cookie, [], [])
     # fast_button.click(get_danbooru_fast, [fast_tag], [])
+    illu_getter_button.click(illu_getter, [illu_getter_pic], [message_output, illu_name])
     download_button.click(download_images, [source, char_name, pre_min_size, pre_background, pre_class, pre_rating, pre_crop_person, pre_auto_tagging, dl_count, pixiv_no_ai], [message_output], scroll_to_output=True)
     ref_datasets_button.click(ref_datasets, [], [dataset_dropdown])
     stage_button.click(three_stage, [dataset_dropdown], [message_output])
@@ -957,5 +994,5 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
 if __name__ == "__main__":
     # log.info(f"Server started at http://{args.host}:{args.port}")
     if sys.platform == "win32":
-        webbrowser.open(f"http://{args.host}:{args.port}")
+        webbrowser.open(f"http://{args.host}:{args.port}" + ("?__theme=dark" if cfg.get('theme', '亮色') == '黑色' else ""))
     iblock.launch(server_port=args.port, server_name=args.host, share=args.share)
