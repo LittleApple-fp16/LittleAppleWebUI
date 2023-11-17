@@ -24,7 +24,7 @@ from typing import Literal, cast
 from pixivpy3 import AppPixivAPI, PixivError
 from tqdm import tqdm
 from tqdm.contrib import tzip
-from waifuc.action import HeadCountAction, AlignMinSizeAction, CCIPAction, ThreeStageSplitAction, ModeConvertAction, ClassFilterAction, PersonSplitAction, TaggingAction, RatingFilterAction, NoMonochromeAction, RandomFilenameAction
+from waifuc.action import HeadCountAction, AlignMinSizeAction, CCIPAction, ThreeStageSplitAction, ModeConvertAction, ClassFilterAction, PersonSplitAction, TaggingAction, RatingFilterAction, NoMonochromeAction, RandomFilenameAction, FirstNSelectAction, FilterSimilarAction
 from waifuc.export import SaveExporter, TextualInversionExporter
 from waifuc.source import DanbooruSource, PixivSearchSource, ZerochanSource, LocalSource, GcharAutoSource
 from PIL import Image
@@ -45,9 +45,8 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
     global output_cache
     actions = []
     rating_map = {0: 'safe', 1: 'r15', 2: 'r18'}
-    class_map = {1: 'illustration', 2: 'bangumi'}
-    ratings_to_filter = set(rating_map.values()) - set([rating_map[i] for i in p_rating if i in rating_map])
-    # ratings_to_filter = set([rating_map[i] for i in p_rating if i in rating_map])
+    # ratings_to_filter = set(rating_map.values()) - set([rating_map[i] for i in p_rating if i in rating_map])
+    ratings_to_filter = set([rating_map[i] for i in p_rating if i in rating_map])
     print("\n - 开始获取数据集")
     character_list = character_name.split(',')
     for character in character_list:
@@ -63,21 +62,24 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
                 no_ai=p_ai,
                 refresh_token=cfg.get('pixiv_token', '')
             )
-            actions.append(CCIPAction())  # 用于过滤pixiv传回的不相关角色图像
+            # actions.append(CCIPAction())
         elif source_type == 'Zerochan':
             source_init = ZerochanSource([character, 'solo'])
         elif source_type == '自动':
             source_init = GcharAutoSource(character, pixiv_refresh_token=cfg.get('pixiv_token', ''))
-            actions.append(CCIPAction())
+            # actions.append(CCIPAction())
         else:
             output_cache = []
             return "图站错误"
         if p_class:
             if 0 in p_class:
                 actions.append(NoMonochromeAction())
+            if 1 in p_class:
+                actions.append(ClassFilterAction(['illustration', 'bangumi']))
             # class_to_filter = set(class_map.values()) - set([class_map[i] for i in p_class if i in class_map])
-            class_to_filter = set([class_map[i] for i in p_class if i in class_map])
-            actions.append(ClassFilterAction(cast(list[Literal['illustration', 2: 'bangumi']], list(class_to_filter))))  # 过滤具有评级的图片
+            # class_to_filter = set([class_map[i] for i in p_class if i in class_map])
+        if num_images >= 64:
+            actions.append(CCIPAction())
         if p_crop_person:
             actions.append(PersonSplitAction())
         if p_auto_tagging:
@@ -85,12 +87,14 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
         if p_min_size:
             # print(int(p_min_size))
             actions.append(AlignMinSizeAction(min_size=int(p_min_size)))
+        actions.append(FilterSimilarAction('all'))
         actions.append(ModeConvertAction('RGB', p_background))
         actions.append(HeadCountAction(1))
         actions.append(RandomFilenameAction(ext='.png'))
         # print(cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter)))
         actions.append(RatingFilterAction(ratings=cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter))))
-        source_init.attach(*actions)[:int(num_images)].export(  # 只下载前num_images张图片
+        actions.append(FirstNSelectAction(int(num_images)))
+        source_init.attach(*actions).export(  # 只下载前num_images张图片
             TextualInversionExporter(save_path)  # 将图片保存到指定路径
         )
         # print(ratings_to_filter)
@@ -756,10 +760,10 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
         with gr.Tab("图站"):
             source = gr.Radio(['Danbooru', 'Pixiv', 'Zerochan', '自动'], label='选择图站', value='Danbooru')
             char_name = gr.Textbox(label='角色名称', value='', placeholder='填入角色名')
-            pre_min_size = gr.Textbox(label="最小尺寸", value="600", interactive=True)
+            pre_min_size = gr.Textbox(label="最大尺寸", value="", placeholder="不填写将不生效", interactive=True)
             pre_background = gr.ColorPicker(label="背景色", value="#FFFFFF", interactive=True)
-            pre_class = gr.CheckboxGroup(["素描", "漫画", "3D"], label="风格过滤", value=None, type="index", interactive=True)
-            pre_rating = gr.CheckboxGroup(["健全", "r15", "r18"], label="评级过滤", value=["健全"], type="index", interactive=True)
+            pre_class = gr.CheckboxGroup(["素描", "3D"], label="风格过滤", value=None, type="index", interactive=True)
+            pre_rating = gr.CheckboxGroup(["健全", "r15", "r18"], label="评级筛选", value=["健全"], type="index", interactive=True)
             pre_crop_person = gr.Checkbox(label="裁剪人物", value=False, interactive=True)
             pre_auto_tagging = gr.Checkbox(label="自动打标", value=False, interactive=True)
             with gr.Column(visible=False) as pixiv_settings:

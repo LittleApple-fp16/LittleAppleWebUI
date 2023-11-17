@@ -35,6 +35,9 @@ echo 激活虚拟环境...
 call %VENV_NAME%\Scripts\activate.bat
 echo 自动更新...
 git pull
+for /f "tokens=1-2 delims=:" %%a in ('ipconfig^|find "IPv4"') do set ip=%%b
+set ipAddress=%ip:~1%
+echo 当前设备IP地址 : %ipAddress%
 echo 启动webui...
 %PYTHON% webui.py --host 0.0.0.0 %*
 pause
