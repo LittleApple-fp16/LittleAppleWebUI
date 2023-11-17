@@ -5,6 +5,7 @@ import time
 
 import matplotlib
 import os
+import re
 import gradio as gr
 import random
 import json
@@ -127,6 +128,7 @@ def download_illust(i_name, i_source):
         # print(json_result)
         illust = json_result.user_previews[0].illusts[0]
         # print(illust)
+        # links = get_image_links(i_id) if i_id else get_image_links(illust['user']['id'])
         links = get_image_links(illust['user']['id'])
         # print(links)
         kemono_arg = kemono_args()
@@ -161,8 +163,8 @@ def download_illust(i_name, i_source):
         # return "已获取"+illust['user']['name']+"画师数据集"
         if 1 in i_source:
             kemono_dl(kemono_arg)
-    except:
-        print("[错误] - 获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须设置Kemono令牌才能获取Fanbox的内容\n你必须输入正确的画师名")
+    except Exception as exp:
+        print(f"[错误] - 获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须设置Kemono令牌才能获取Fanbox的内容\n你必须输入正确的画师名, 错误信息:{exp}")
         return "获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须设置Kemono令牌才能获取Fanbox的内容\n你必须输入正确的画师名"
 
 
@@ -236,7 +238,7 @@ async def illu_getter(pic):
             return "未找到", ""
         else:
             output_cache = []
-            return selected.author + " (" + selected.author_url + ") " + "的作品:" + selected.title, selected.author
+            return selected.author + " (" + selected.author_url + ") " + "的作品:" + selected.title, selected.author  # re.search(r'\d+$', selected.author_url).group()
 
 
 
@@ -792,6 +794,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
             illu_get_source.change(illu_source_limit, [illu_get_source], [illu_button])
             illu_getter_pic = gr.Image(type="filepath", label="到底是哪个画师?")
             illu_getter_button = gr.Button("获取画师名", interactive=True)
+            # illu_id_tmp = gr.Textbox(visible=False)
         # with gr.Tab("快速获取"):
         #     fast_tag = gr.Textbox(label="Tag", placeholder="aaa,bbb|ccc,ddd", value='')
         #     fast_button = gr.Button("开始获取", variant="primary", interactive=True)
