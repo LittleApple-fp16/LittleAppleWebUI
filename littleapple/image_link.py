@@ -5,7 +5,7 @@ import re
 # from bs4 import BeautifulSoup
 
 
-def get_image_links(user_id):
+def get_image_links(user_id, max_file_size=None):
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.82 Safari/537.36 Edg/93.0.961.52",
     }
@@ -30,12 +30,22 @@ def get_image_links(user_id):
                 illust_id_page = re.findall(r'\d+\*\*\d+', re.sub(r'","title":".*?"pageCount":', '**', p))
                 for k in illust_id_page:
                     if k.split("**")[1] == 1:
-                        text_final.append(f"https://pixiv.re/{k.split('**')[0]}.png")
-                        pic_name.append(f"{k.split('**')[0]}")
+                        image_url = f"https://pixiv.re/{k.split('**')[0]}.png"
+                        image_name = f"{k.split('**')[0]}"
+                        # Check the file size
+                        file_size = int(requests.head(image_url, headers=headers).headers.get('content-length', 0))
+                        if max_file_size is None or file_size <= max_file_size * 1024 * 1024:
+                            text_final.append(image_url)
+                            pic_name.append(image_name)
                     else:
                         for h in range(int(k.split("**")[1])):
-                            text_final.append(f"https://pixiv.re/{k.split('**')[0]}-{h+1}.png")
-                            pic_name.append(f"{k.split('**')[0]}-{h+1}")
+                            image_url = f"https://pixiv.re/{k.split('**')[0]}-{h+1}.png"
+                            image_name = f"{k.split('**')[0]}-{h+1}"
+                            # Check the file size
+                            file_size = int(requests.head(image_url, headers=headers).headers.get('content-length', 0))
+                            if max_file_size is None or file_size <= max_file_size * 1024 * 1024:
+                                text_final.append(image_url)
+                                pic_name.append(image_name)
         return text_final, pic_name
 
 

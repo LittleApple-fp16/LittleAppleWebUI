@@ -67,7 +67,7 @@ class downloader:
         self.overwrite = args['overwrite']
         self.only_ext = args['only_filetypes']
         self.not_ext = args['skip_filetypes']
-        self.max_size = args['max_filesize']
+        self.max_size = args['max_filesize'] * 1024 * 1024
         self.min_size = args['min_filesize']
 
         # controlls posts to ignore
@@ -83,8 +83,10 @@ class downloader:
         self.ratelimit_sleep = args['ratelimit_sleep']
         self.post_timeout = args['post_timeout']
         self.simulate = args['simulate']
+        self.proxie = args['proxie']
 
         self.session = requests.Session()
+        self.session.proxies = self.proxie
         retries = Retry(
             total=self.retry,
             backoff_factor=0.1,
@@ -607,11 +609,11 @@ class downloader:
                     return True
             elif self.min_size:
                 if not (self.min_size <= int(file_size)):
-                    logger.info(f"跳过: {os.path.split(file['file_path'])[1]} | 此文件大小 {file_size} 不 >= {self.min_size}")
+                    logger.info(f"跳过: {os.path.split(file['file_path'])[1]} | 此文件大小 {file_size} 不符合 >= {self.min_size}")
                     return True
             elif self.max_size:
                 if not (int(file_size) <= self.max_size):
-                    logger.info(f"跳过: {os.path.split(file['file_path'])[1]} | 此文件大小 {file_size} 不t <= {self.max_size}")
+                    logger.info(f"跳过: {os.path.split(file['file_path'])[1]} | 此文件大小 {file_size} 不符合 <= {self.max_size}")
                     return True
         return False
 
