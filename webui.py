@@ -1,43 +1,48 @@
-import io
-import logging
-import sys
-import time
+try:
+    import io
+    import logging
+    import sys
+    import time
 
-import matplotlib
-import os
-import re
-import gradio as gr
-import random
-import json
-import glob
-import numpy
-import argparse
-import webbrowser
-import asyncio
-from loguru import logger
-from PicImageSearch.model import Ascii2DResponse
-from PicImageSearch import Ascii2D, Network
-from littleapple.refresh_token import get_ref_token
-from littleapple.image_link import get_image_links, download_link
-from littleapple.kemono_dl.main import downloader as kemono_dl
-from littleapple.kemono_dl.args import get_args as kemono_args
-from typing import Literal, cast
-from pixivpy3 import AppPixivAPI, PixivError
-from tqdm import tqdm
-from tqdm.contrib import tzip
-from waifuc.action import HeadCountAction, AlignMinSizeAction, CCIPAction, ThreeStageSplitAction, ModeConvertAction, ClassFilterAction, PersonSplitAction, TaggingAction, RatingFilterAction, NoMonochromeAction, RandomFilenameAction, FirstNSelectAction, FilterSimilarAction
-from waifuc.export import SaveExporter, TextualInversionExporter
-from waifuc.source import DanbooruSource, PixivSearchSource, ZerochanSource, LocalSource, GcharAutoSource
-from PIL import Image
-from train import run_train_plora
-from imgutils.data import load_image, load_images, rgb_encode, rgb_decode
-from imgutils.tagging import get_wd14_tags, get_mldanbooru_tags, drop_blacklisted_tags, drop_overlap_tags, tags_to_text
-from imgutils.metrics import ccip_difference, ccip_clustering, lpips_clustering
-from imgutils.operate import censor_areas, squeeze, squeeze_with_transparency
-from imgutils.detect import detect_faces, detect_heads, detection_visualize, detect_person
-from imgutils.segment import segment_rgba_with_isnetis
-from imgutils.ocr import detect_text_with_ocr
-from cyberharem.publish.convert import convert_to_webui_lora
+    import matplotlib
+    import os
+    import re
+    import gradio as gr
+    import random
+    import json
+    import glob
+    import numpy
+    import argparse
+    import webbrowser
+    import asyncio
+    from loguru import logger
+    from PicImageSearch.model import Ascii2DResponse
+    from PicImageSearch import Ascii2D, Network
+    from littleapple.refresh_token import get_ref_token
+    from littleapple.image_link import get_image_links, download_link
+    from littleapple.kemono_dl.main import downloader as kemono_dl
+    from littleapple.kemono_dl.args import get_args as kemono_args
+    from typing import Literal, cast
+    from pixivpy3 import AppPixivAPI, PixivError
+    from tqdm import tqdm
+    from tqdm.contrib import tzip
+    from waifuc.action import HeadCountAction, AlignMinSizeAction, CCIPAction, ThreeStageSplitAction, ModeConvertAction, ClassFilterAction, PersonSplitAction, TaggingAction, RatingFilterAction, NoMonochromeAction, RandomFilenameAction, FirstNSelectAction, FilterSimilarAction
+    from waifuc.export import SaveExporter, TextualInversionExporter
+    from waifuc.source import DanbooruSource, PixivSearchSource, ZerochanSource, LocalSource, GcharAutoSource
+    from PIL import Image
+    from train import run_train_plora
+    from imgutils.data import load_image, load_images, rgb_encode, rgb_decode
+    from imgutils.tagging import get_wd14_tags, get_mldanbooru_tags, drop_blacklisted_tags, drop_overlap_tags, tags_to_text
+    from imgutils.metrics import ccip_difference, ccip_clustering, lpips_clustering
+    from imgutils.operate import censor_areas, squeeze, squeeze_with_transparency
+    from imgutils.detect import detect_faces, detect_heads, detection_visualize, detect_person
+    from imgutils.segment import segment_rgba_with_isnetis
+    from imgutils.ocr import detect_text_with_ocr
+    from cyberharem.publish.convert import convert_to_webui_lora
+except ModuleNotFoundError:
+    print("[致命错误] - 检测到模块丢失， 正在尝试安装依赖，请等待安装完成后再次打开")
+    import subprocess
+    subprocess.run(['dependencies.bat'], check=True)
 
 matplotlib.use('Agg')
 
