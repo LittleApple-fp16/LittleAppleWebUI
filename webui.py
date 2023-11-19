@@ -29,6 +29,9 @@ try:
     from waifuc.action import HeadCountAction, AlignMinSizeAction, CCIPAction, ThreeStageSplitAction, ModeConvertAction, ClassFilterAction, PersonSplitAction, TaggingAction, RatingFilterAction, NoMonochromeAction, RandomFilenameAction, FirstNSelectAction, FilterSimilarAction
     from waifuc.export import SaveExporter, TextualInversionExporter
     from waifuc.source import DanbooruSource, PixivSearchSource, ZerochanSource, LocalSource, GcharAutoSource
+    from cyberharem.publish.__main__ import huggingface as cyber_hugging
+    from cyberharem.publish.__main__ import rehf as cyber_rehf
+    from cyberharem.publish.__main__ import civitai as cyber_civitai
     from PIL import Image
     from train import run_train_plora
     from imgutils.data import load_image, load_images, rgb_encode, rgb_decode
@@ -728,6 +731,35 @@ def pixiv_login():
         print("[警告] - Pixiv登录失败，已尝试三次，请前往设置检查刷新令牌，并尝试重新登录")
 
 
+def pipeline_start(ch_names):
+    global output_cache
+    global cfg
+    actions = [NoMonochromeAction(), CCIPAction(), PersonSplitAction(), HeadCountAction(1), TaggingAction(force=True), FilterSimilarAction('all'), ModeConvertAction('RGB'),
+               RandomFilenameAction(ext='.png'), FirstNSelectAction(200)]
+    for ch in ch_names:
+        ch = ch.replace(' ', '_')
+        save_path = "dataset/pipeline" + ch
+        source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+        source_init.attach(*actions).export(
+            TextualInversionExporter(save_path)
+        )
+        run_train_plora("pipeline" + ch, ch, None, 6, 10)
+        try:
+            cyber_hugging(workdir=save_path, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30)
+        except Exception as e:
+            print(" - 发生错误 但还活着:", e)
+        try:
+            cyber_rehf(workdir=save_path, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30)
+        except Exception as e:
+            print(" - 发生错误 但还活着:", e)
+        try:
+            cyber_civitai(repository=ch, draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=cfg.get('civitai_token', ''))
+        except Exception as e:
+            print(" - 错误:", e)
+        print("已完成"+ch+"角色上传")
+    return "所有任务完成"
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--host", type=str, default="127.0.0.1")
 parser.add_argument("--port", type=int, default=7862)
@@ -766,10 +798,12 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
             # save_path = gr.Textbox(label='保存路径', value='dataset', placeholder='自动创建子文件夹')
             download_button = gr.Button("获取图片", variant="primary", interactive=True)
             with gr.Accordion("使用说明", open=False):
-                gr.Markdown("对于单图站，填入要搜索的任何内容以获取对应标签图片\n"
+                gr.Markdown("更臃肿的waifuc"
+                            "对于单图站，填入要搜索的任何内容以获取对应标签图片\n"
                             "对于自动图站源，必须填入一个角色名\n"
                             "所有图站支持多内容顺序爬取，用半角逗号分隔，如\"铃兰,香风智乃\"\n"
-                            "保存的图片会以搜索内容自动生成一个数据集，获取完成后刷新数据集即可查看")
+                            "保存的图片会以搜索内容自动生成一个数据集，获取完成后刷新数据集即可查看"
+                            "Pixiv源速度最慢、且质量最差")
             pre_rating.change(pre_rating_limit, [pre_rating], [download_button])
         with gr.Tab("画师"):
             illu_name = gr.Textbox(label="画师名", placeholder="完整画师名")
@@ -927,6 +961,13 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
     with gr.Tab("质量验证"):
         with gr.Accordion("使用说明", open=False):
             gr.Markdown("soon...")
+    with gr.Tab("一键挂机"):
+        pipeline_text = gr.Textbox(label="输入角色名", placeholder="《输入角色名然后你的模型就出现在c站了》", info="要求角色名 用,分隔")
+        pipeline_button = gr.Button("开始挂机", variant="primary")
+        with gr.Accordion("使用说明", open=False):
+            gr.Markdown("《输入角色名然后你的模型就出现在c站了》\n"
+                        "需要在设置中设置c站token\n"
+                        "需要在计算机中添加环境变量: 键名 HF_TOKEN 值: 从登录的HuggingFace网站获取")
     with gr.Tab("设置"):
         with gr.Tab("Pixiv"):
             pixiv_token = gr.Textbox(label="刷新令牌", placeholder="不填写将无法访问Pixiv", interactive=True, value=cfg.get('pixiv_token', ''))
@@ -950,6 +991,8 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
                             "具体操作：使用EditThisCookie浏览器扩展\n"
                             "进入Kemono网站，导出cookie，将cookie粘贴到设置中，删除第一项和第三项，\n"
                             "删除[]大括号，只保留名为session的cookie{xxx}即可")
+        with gr.Tab("Civitai"):
+            civitai_token = gr.Textbox(label="Cookie", placeholder="不填写无法自动上传c站", interactive=True, value=cfg.get('civitai_token', ''))
         with gr.Tab("代理服务器"):
             proxie_ip = gr.Textbox(label="代理IP地址", placeholder="代理软件的IP地址", value=cfg.get('proxie_ip', ''))
             proxie_host = gr.Textbox(label="代理端口", placeholder="代理软件中的端口", value=cfg.get('proxie_host', ''))
@@ -964,6 +1007,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
         save_output = gr.Button("💾", elem_id="save_output", interactive=False)
         message_output.change(save_output_ctrl, [], save_output)
     # dl_count.change(None, )
+    pipeline_button.click(pipeline_start, [pipeline_text], [message_output])
     setting_save_button.click(save_settings, [pixiv_token, fanbox_cookie, proxie_ip, proxie_host, proxie_enabled, theme_select], [message_output])
     pixiv_manual_login.click(pixiv_login, [], [])
     pixiv_get_token.click(get_ref_token, [], [])

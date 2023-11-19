@@ -138,7 +138,7 @@ def civitai_upsert_model(
 
 
 def civitai_query_vae_models(session=None, model_id=None):
-    session = session or get_civitai_session()
+    session = session  # or get_civitai_session()
     logging.info('Querying VAE models ...')
     resp = srequest(
         session, 'GET', ' https://civitai.com/api/trpc/modelVersion.getModelVersionsByModelType',
@@ -305,10 +305,10 @@ def get_clamped_size(width, height, max_val, _type='all'):
 
 
 def parse_publish_at(publish_at: Optional[str] = None, keep_none: bool = True) -> Optional[str]:
-    try:
-        from zoneinfo import ZoneInfo
-    except (ImportError, ModuleNotFoundError):
-        from backports.zoneinfo import ZoneInfo
+    # try:
+    from zoneinfo import ZoneInfo
+    # except (ImportError, ModuleNotFoundError):
+    #     from backports.zoneinfo import ZoneInfo
 
     if not keep_none and publish_at is None:
         publish_at = 'now'
@@ -828,6 +828,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
         4. Individuals who are not comfortable with the fully automated process of training character models using LoRA, or those who believe that training character models must be done purely through manual operations to avoid disrespecting the characters.
         5. Individuals who finds the generated image content offensive to their values.
         """
+        model_desc_default = f"This is for {trigger_word}!"
         model_name = model_name or try_find_title(char_name, game_name) or \
                      try_get_title_from_repo(repo) or trigger_word.replace('_', ' ')
         if not force_create_model:
