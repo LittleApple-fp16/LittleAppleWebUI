@@ -798,8 +798,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
             # save_path = gr.Textbox(label='保存路径', value='dataset', placeholder='自动创建子文件夹')
             download_button = gr.Button("获取图片", variant="primary", interactive=True)
             with gr.Accordion("使用说明", open=False):
-                gr.Markdown("更臃肿的waifuc"
-                            "对于单图站，填入要搜索的任何内容以获取对应标签图片\n"
+                gr.Markdown("对于单图站，填入要搜索的任何内容以获取对应标签图片\n"
                             "对于自动图站源，必须填入一个角色名\n"
                             "所有图站支持多内容顺序爬取，用半角逗号分隔，如\"铃兰,香风智乃\"\n"
                             "保存的图片会以搜索内容自动生成一个数据集，获取完成后刷新数据集即可查看"
