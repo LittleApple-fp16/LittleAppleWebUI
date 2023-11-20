@@ -737,7 +737,7 @@ def pipeline_start(ch_names):
     actions = [NoMonochromeAction(), CCIPAction(), PersonSplitAction(),
                HeadCountAction(1), TaggingAction(force=True),
                FilterSimilarAction('all'), ModeConvertAction('RGB'),
-               FirstNSelectAction(700)]  # 670
+               FirstNSelectAction(700)]  # 700+
     ch_list = ch_names.split(',')
     for ch in ch_list:
         ch = ch.replace(' ', '_')
