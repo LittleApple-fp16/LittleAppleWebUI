@@ -741,18 +741,18 @@ def pipeline_start(ch_names):
     ch_list = ch_names.split(',')
     for ch in ch_list:
         ch = ch.replace(' ', '_')
-        save_path = "pipeline/dataset/" + ch
-        source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
-        source_init.attach(*actions).export(
-            TextualInversionExporter(save_path)
-        )
+        save_path = "pipeline\\dataset\\" + ch
+        # source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+        # source_init.attach(*actions).export(
+        #     TextualInversionExporter(save_path)
+        # )
         run_train_plora(ch, ch, None, 8, 4, is_pipeline=True)
         try:
-            cyber_hugging(workdir='pipeline/runs/' + ch, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30)
+            cyber_hugging(workdir='pipeline\\runs\\' + ch, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30)
         except Exception as e:
             print(" - 发生错误 但还活着:", e)
         try:
-            cyber_rehf(workdir='pipeline/runs/' + ch, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30)
+            cyber_rehf(workdir='pipeline\\runs\\' + ch, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30)
         except Exception as e:
             print(" - 发生错误 但还活着:", e)
         try:

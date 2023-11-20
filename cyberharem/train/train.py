@@ -57,6 +57,7 @@ def train_plora(
 
         workdir = workdir or os.path.join('runs', name)
         os.makedirs(workdir, exist_ok=True)
+        # os.makedirs(workdir)
         save_recommended_tags(ds_dir, name, workdir)
         with open(os.path.join(workdir, 'meta.json'), 'w', encoding='utf-8') as f:
             json.dump({
