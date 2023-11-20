@@ -5,7 +5,7 @@ _DEFAULT_TRAIN_MODEL = 'deepghs/animefull-latest'
 
 
 def create_embedding(
-        name: str, n_words: int = 4, init_text: str = '*[0.017, 6]', replace: bool = False,
+        name: str, n_words: int = 4, init_text: str = '*0.017', replace: bool = False,
         pretrained_model: str = _DEFAULT_TRAIN_MODEL, embs_dir: str = _DEFAULT_TRAIN_MODEL
 ):
     pt_creator = PTCreator(pretrained_model, embs_dir)

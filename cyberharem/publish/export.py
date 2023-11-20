@@ -20,11 +20,11 @@ except (ImportError, ModuleNotFoundError):
 
 from .convert import convert_to_webui_lora
 from .steps import find_steps_in_workdir
-from cyberharem.dataset import load_dataset_for_character
-from cyberharem.dataset.tags import sort_draw_names
-from cyberharem.infer.draw import _DEFAULT_INFER_MODEL
-from cyberharem.infer.draw import draw_with_workdir
-from cyberharem.utils import repr_tags, load_tags_from_directory
+from ..dataset import load_dataset_for_character
+from ..dataset.tags import sort_draw_names
+from ..infer.draw import _DEFAULT_INFER_MODEL
+from ..infer.draw import draw_with_workdir
+from ..utils import repr_tags, load_tags_from_directory
 
 KNOWN_MODEL_HASHES = {
     'AIARTCHAN/anidosmixV2': 'EB49192009',

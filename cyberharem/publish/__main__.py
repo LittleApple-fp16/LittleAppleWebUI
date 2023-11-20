@@ -138,14 +138,14 @@ def rehf(repository, revision, n_repeats, pretrained_model,
 @click.option('--no_ccip', 'no_ccip_check', is_flag=True, type=bool, default=False,
               help='No CCIP check.', show_default=True)
 def civitai(repository, title, steps, epochs, draft, publish_time, allow_nsfw,
-            version_name, force_create, no_ccip_check, session=None):
+            version_name, force_create, no_ccip_check):
     logging.try_init_root(logging.INFO)
     model_id = civitai_publish_from_hf(
         repository, title,
         step=steps, epoch=epochs, draft=draft,
         publish_at=publish_time, allow_nsfw_images=allow_nsfw,
         version_name=version_name, force_create_model=force_create,
-        no_ccip_check=no_ccip_check, session=session
+        no_ccip_check=no_ccip_check,
     )
     url = f'https://civitai.com/models/{model_id}'
     if not draft:
