@@ -960,9 +960,9 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
     with gr.Tab("质量验证"):
         with gr.Accordion("使用说明", open=False):
             gr.Markdown("soon...")
-    with gr.Tab("一键挂机"):
+    with gr.Tab("全自动训练"):
         pipeline_text = gr.Textbox(label="输入角色名", placeholder="《输入角色名然后你的模型就出现在c站了》", info="要求角色名 用,分隔")
-        pipeline_button = gr.Button("开始挂机", variant="primary")
+        pipeline_button = gr.Button("开始全自动训练", variant="primary")
         with gr.Accordion("使用说明", open=False):
             gr.Markdown("《输入角色名然后你的模型就出现在c站了》\n"
                         "需要在设置中设置c站token\n"
