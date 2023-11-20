@@ -87,7 +87,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
                 actions.append(ClassFilterAction(['illustration', 'bangumi']))
             # class_to_filter = set(class_map.values()) - set([class_map[i] for i in p_class if i in class_map])
             # class_to_filter = set([class_map[i] for i in p_class if i in class_map])
-        if num_images >= 64:
+        if int(num_images) >= 64:
             actions.append(CCIPAction())
         if p_crop_person:
             actions.append(PersonSplitAction())
@@ -736,9 +736,10 @@ def pipeline_start(ch_names):
     global cfg
     actions = [NoMonochromeAction(), CCIPAction(), PersonSplitAction(), HeadCountAction(1), TaggingAction(force=True), FilterSimilarAction('all'), ModeConvertAction('RGB'),
                RandomFilenameAction(ext='.png'), FirstNSelectAction(200)]
-    for ch in ch_names:
+    ch_list = ch_names.split(',')
+    for ch in ch_list:
         ch = ch.replace(' ', '_')
-        save_path = "dataset/pipeline" + ch
+        save_path = "dataset/pipeline/" + ch
         source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
         source_init.attach(*actions).export(
             TextualInversionExporter(save_path)

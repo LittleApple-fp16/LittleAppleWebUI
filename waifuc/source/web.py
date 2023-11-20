@@ -44,11 +44,14 @@ class WebDataSource(RootDataSource):
                 except (IOError, DecompressionBombError) as err:
                     warnings.warn(f'Skipped due to error: {err!r}')
                     continue
-                except NotADirectoryError:
-                    os.remove(td)
-                    continue
-                finally:
+                except NotADirectoryError as e:
+                    print(" - 异常:", e)
+                    # os.remove(td)
                     td.cleanup()
+                    continue
+                # finally:
+                    # print(td)
+                    # td.cleanup()
 
                 meta = {**meta, 'url': url}
                 yield ImageItem(image, meta)
