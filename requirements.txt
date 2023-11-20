@@ -195,3 +195,4 @@ zipp==3.17.0
 beautifulsoup4==4.12.2
 yt_dlp==2022.4.8
 PicImageSearch==3.9.6
+pypinyin

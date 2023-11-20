@@ -734,8 +734,10 @@ def pixiv_login():
 def pipeline_start(ch_names):
     global output_cache
     global cfg
-    actions = [NoMonochromeAction(), CCIPAction(), PersonSplitAction(), HeadCountAction(1), TaggingAction(force=True), FilterSimilarAction('all'), ModeConvertAction('RGB'),
-               RandomFilenameAction(ext='.png'), FirstNSelectAction(2)]  # test 200
+    actions = [NoMonochromeAction(), CCIPAction(), PersonSplitAction(),
+               HeadCountAction(1), TaggingAction(force=True),
+               FilterSimilarAction('all'), ModeConvertAction('RGB'),
+               FirstNSelectAction(200)]
     ch_list = ch_names.split(',')
     for ch in ch_list:
         ch = ch.replace(' ', '_')
@@ -744,7 +746,7 @@ def pipeline_start(ch_names):
         source_init.attach(*actions).export(
             TextualInversionExporter(save_path)
         )
-        run_train_plora(ch, ch, None, 6, 10, is_pipeline=True)
+        run_train_plora(ch, ch, None, 8, 2, is_pipeline=True)
         try:
             cyber_hugging(workdir='pipeline/runs/' + ch, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30)
         except Exception as e:
