@@ -794,7 +794,7 @@ def pipeline_start(ch_names):
                HeadCountAction(1), TaggingAction(force=True),
                FilterSimilarAction('all'), ModeConvertAction('RGB'),  # FilterSimilar: lpips差分过滤
                FileExtAction(ext='.png'),  # png格式质量无损
-               FirstNSelectAction(700)]  # 700+
+               FirstNSelectAction(1000)]  # 700+
     ch_list = ch_names.split(',')
     for ch in ch_list:
         gr.Info("["+ch+"]"+" 全自动训练开始")
@@ -805,7 +805,7 @@ def pipeline_start(ch_names):
         source_init.attach(*actions).export(
             TextualInversionExporter(save_path)
         )
-        run_train_plora(ch_e, ch_e, None, 8, 12, is_pipeline=True)  # bs, epoch
+        run_train_plora(ch_e, ch_e, None, 32, 25, is_pipeline=True)  # bs, epoch
 
         def huggingface(workdir: str, repository, revision, n_repeats, pretrained_model,
                         width, height, clip_skip, infer_steps):
