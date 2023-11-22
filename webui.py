@@ -59,7 +59,7 @@ except ModuleNotFoundError:
 matplotlib.use('Agg')
 
 
-def download_images(source_type, character_name, p_min_size, p_background, p_class, p_rating, p_crop_person, p_auto_tagging, num_images, p_ai):
+def download_images(source_type, character_name, p_min_size, p_background, p_class, p_rating, p_crop_person, p_ccip, p_auto_tagging, num_images, p_ai):
     global output_cache
     actions = []
     rating_map = {0: 'safe', 1: 'r15', 2: 'r18'}
@@ -95,7 +95,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
                 actions.append(ClassFilterAction(['illustration', 'bangumi']))
             # class_to_filter = set(class_map.values()) - set([class_map[i] for i in p_class if i in class_map])
             # class_to_filter = set([class_map[i] for i in p_class if i in class_map])
-        if int(num_images) >= 64:
+        if int(num_images) >= 64 and p_ccip:
             actions.append(CCIPAction())
         if p_crop_person:
             actions.append(PersonSplitAction())
@@ -109,7 +109,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
         actions.append(HeadCountAction(1))
         actions.append(RandomFilenameAction(ext='.png'))
         # logger.debug(cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter)))
-        if ratings_to_filter:
+        if ratings_to_filter != set(rating_map.values()):
             actions.append(RatingFilterAction(ratings=cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter))))
         actions.append(FirstNSelectAction(int(num_images)))
         source_init.attach(*actions).export(  # 只下载前num_images张图片
@@ -924,6 +924,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
             pre_class = gr.CheckboxGroup(["素描", "3D"], label="风格过滤", value=None, type="index", interactive=True)
             pre_rating = gr.CheckboxGroup(["健全", "r15", "r18"], label="评级筛选", value=["健全"], type="index", interactive=True)
             pre_crop_person = gr.Checkbox(label="裁剪人物", value=False, interactive=True)
+            pre_ccip_option = gr.Checkbox(label="特征匹配", value=False, interactive=True)
             pre_auto_tagging = gr.Checkbox(label="自动打标", value=False, interactive=True)
             with gr.Column(visible=False) as pixiv_settings:
                 pixiv_no_ai = gr.Checkbox(label="非AI生成", interactive=True, value=False)
@@ -936,7 +937,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
                 gr.Markdown("对于单图站，填入要搜索的任何内容以获取对应标签图片\n"
                             "对于自动图站源，必须填入一个角色名\n"
                             "所有图站支持多内容顺序爬取，用半角逗号分隔，如\"铃兰,香风智乃\"\n"
-                            "保存的图片会以搜索内容自动生成一个数据集，获取完成后刷新数据集即可查看"
+                            "保存的图片会以搜索内容自动生成一个数据集，获取完成后刷新数据集即可查看\n"
                             "Pixiv源速度最慢、且质量最差")
             pre_rating.change(pre_rating_limit, [pre_rating], [download_button])
         with gr.Tab("画师"):
@@ -1151,7 +1152,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
     fanbox_get_cookie.click(get_fanbox_cookie, [], [])
     # fast_button.click(get_danbooru_fast, [fast_tag], [])
     illu_getter_button.click(illu_getter, [illu_getter_pic], [message_output, illu_name])
-    download_button.click(download_images, [source, char_name, pre_min_size, pre_background, pre_class, pre_rating, pre_crop_person, pre_auto_tagging, dl_count, pixiv_no_ai], [message_output], scroll_to_output=True)
+    download_button.click(download_images, [source, char_name, pre_min_size, pre_background, pre_class, pre_rating, pre_crop_person, pre_ccip_option, pre_auto_tagging, dl_count, pixiv_no_ai], [message_output], scroll_to_output=True)
     ref_datasets_button.click(ref_datasets, [], [dataset_dropdown])
     stage_button.click(three_stage, [dataset_dropdown], [message_output])
     drop_ref_button.click(ref_customList, [], [drop_custom_list])
