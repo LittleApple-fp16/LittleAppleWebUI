@@ -57,7 +57,7 @@ except ModuleNotFoundError:
     subprocess.run(['dependencies.bat'], check=True)
 
 matplotlib.use('Agg')
-logger.level("DEAD", no=5, color="<red>", icon="🤬")
+
 
 def download_images(source_type, character_name, p_min_size, p_background, p_class, p_rating, p_crop_person, p_auto_tagging, num_images, p_ai):
     global output_cache
@@ -102,19 +102,19 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
         if p_auto_tagging:
             actions.append(TaggingAction(force=True))
         if p_min_size:
-            # print(int(p_min_size))
+            # logger.debug(int(p_min_size))
             actions.append(AlignMinSizeAction(min_size=int(p_min_size)))
         actions.append(FilterSimilarAction('all'))  # lpips差分过滤
         actions.append(ModeConvertAction('RGB', p_background))
         actions.append(HeadCountAction(1))
         actions.append(RandomFilenameAction(ext='.png'))
-        # print(cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter)))
+        # logger.debug(cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter)))
         actions.append(RatingFilterAction(ratings=cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter))))
         actions.append(FirstNSelectAction(int(num_images)))
         source_init.attach(*actions).export(  # 只下载前num_images张图片
             TextualInversionExporter(save_path)  # 将图片保存到指定路径
         )
-        # print(ratings_to_filter)
+        # logger.debug(ratings_to_filter)
     gr.Info("数据集获取已结束")
     output_cache = []
     return "已获取数据集"
@@ -122,7 +122,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
 
 def dataset_getImg(dataset_name):  # 请确保每个方法中只调用一次 由于tqdm
     global output_cache
-    print(" - 加载数据集图像...")
+    logger.info(" - 加载数据集图像...")
     dataset_path = "dataset/" + dataset_name
     images = []
     img_name = []
@@ -169,7 +169,7 @@ def download_illust(i_name, i_source, i_maxsize=None):
         return "下载已结束"
     except Exception as exp:
         gr.Warning("数据集获取失败, 请查看控制台")
-        print(f"[错误] - 获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须设置Kemono令牌才能获取Fanbox的内容\n你必须输入正确的画师名, 错误信息:{exp}")
+        logger.error(f"[错误] - 获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须设置Kemono令牌才能获取Fanbox的内容\n你必须输入正确的画师名, 错误信息:{exp}")
         return "获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须设置Kemono令牌才能获取Fanbox的内容\n你必须输入正确的画师名"
 
 
@@ -399,7 +399,7 @@ def crop_hw(dataset_name):
     result = []
     for img, infos in zip(images, mask_info):
         # infos = infos[0]
-        print(infos)
+        # logger.debug(infos)
         for einfo in infos:
             (x0, y0, x1, y1) = einfo[0]
             detect_type = einfo[1]
@@ -774,17 +774,17 @@ def pixiv_login():
         try:
             pyapi.auth(refresh_token=cfg.get('pixiv_token', ''))
             gr.Info("Pixiv已登录")
-            print("[信息] - Pixiv登录成功")
+            logger.success("[信息] - Pixiv登录成功")
             break
         except PixivError:
             time.sleep(10)
         if not cfg.get('pixiv_token', ''):
             gr.Warning("Pixiv登录失败，因为没有设置访问令牌")
-            print("[警告] - Pixiv登录失败，因为没有设置访问令牌")
+            logger.warning("[警告] - Pixiv登录失败，因为没有设置访问令牌")
             break
     else:
         gr.Warning("Pixiv登录失败")
-        print("[警告] - Pixiv登录失败，已尝试三次，请前往设置检查刷新令牌，并尝试重新登录")
+        logger.warning("[警告] - Pixiv登录失败，已尝试三次，请前往设置检查刷新令牌，并尝试重新登录")
 
 
 def pipeline_start(ch_names):
@@ -879,17 +879,17 @@ def pipeline_start(ch_names):
         try:
             huggingface(workdir='pipeline\\runs\\' + ch_e, repository=None, n_repeats=3, pretrained_model=_DEFAULT_INFER_MODEL, width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
         except Exception as e:
-            print(" - 错误:", e)
+            logger.error(" - 错误:", e)
         try:
             rehf(repository=ch_e, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
         except Exception as e:
-            print(" - 错误:", e)
+            logger.error(" - 错误:", e)
         try:
             civitai(repository=ch_e, draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=cfg.get('civitai_token', ''), epochs=None, publish_time=None, steps=None, title=None, version_name=None)
         except Exception as e:
-            print(" - 错误:", e)
+            logger.error(" - 错误:", e)
         gr.Info("["+ch+"]" + " 全自动训练完成")
-        print("已完成"+ch+"角色上传")
+        logger.success("已完成"+ch+"角色上传")
     gr.Info("所有全自动训练任务完成")
     return "所有任务完成"
 

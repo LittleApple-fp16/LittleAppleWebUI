@@ -9,33 +9,33 @@ if "%userinput%"=="" (
     set userinput=python
 )
 SET PYTHON=%userinput%
-    echo 正在创建虚拟环境...
-    echo 依赖源推荐aliyun
+    echo [初始化] 正在创建虚拟环境...
+    echo [信息] 依赖源推荐aliyun
     %PYTHON% -m venv %VENV_NAME%
     call %VENV_NAME%\Scripts\activate.bat
-    @rem 设置依赖路径到当前目录内...
+    @rem [初始化] 设置依赖路径到当前目录内...
     set "path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%"
-    echo 正在安装依赖...
+    echo [初始化] 正在安装依赖...
     python -m pip install --upgrade pip
     pip install -r requirements.txt
-    echo 完成，请手动安装pytorch：
-    echo 请打开environment.bat运行torch的安装
-    echo torch的安装需要良好网络连接
-    echo 安装命令 pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
+    echo [信息] 完成，请手动安装pytorch：
+    echo [信息] 请打开environment.bat运行torch的安装
+    echo [信息] torch的安装需要良好网络连接
+    echo [信息] 安装命令 pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
     pause
 ) else (
-    echo 检测到虚拟环境
+    echo [自检] 检测到虚拟环境
     SET PYTHON=python
 )
 
-@rem 设置依赖路径到当前目录内...
+@rem [自检] 设置依赖路径到当前目录内...
 set "path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%"
 
-echo 激活虚拟环境...
+echo [自检] 激活虚拟环境...
 call %VENV_NAME%\Scripts\activate.bat
-echo 自动更新...
+echo [自检] 自动更新...
 git pull
-echo 启动webui...
+echo [自检] 启动webui...
 %PYTHON% webui.py %*
 pause
 exit /b
