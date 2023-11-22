@@ -30,14 +30,14 @@ def load_dataset_for_character(source, size: Union[Tuple[int, int], str] = (512,
 
     else:
         if isinstance(source, Character):
-            repo = f'CyberHarem/{get_ch_name(source)}'
+            repo = f'AppleHarem/{get_ch_name(source)}'
         else:
             try_ch = get_character(source)
             if try_ch is None:
                 repo = source
             else:
                 source = try_ch
-                repo = f'CyberHarem/{get_ch_name(source)}'
+                repo = f'AppleHarem/{get_ch_name(source)}'
 
         hf_fs = get_hf_fs()
         if isinstance(size, tuple):

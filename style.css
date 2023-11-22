@@ -18,6 +18,7 @@
 
 #dataset_dropbar {
     max-width: 36em;
+    background: none;
 }
 
 #dataset_dropbar div.wrap.wrap.wrap.wrap {

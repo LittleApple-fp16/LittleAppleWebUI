@@ -107,7 +107,7 @@ def export_workdir(workdir: str, export_dir: str, n_repeats: int = 2,
     else:
         dataset_info = None
 
-    ds_repo = ds_repo or f'CyberHarem/{name}'
+    ds_repo = ds_repo or f'AppleHarem/{name}'
     ds_size = (384, 512) if not dataset_info or not dataset_info['type'] else dataset_info['type']
     logging.info(f'Loading dataset {ds_repo!r}, {ds_size!r} ...')
     with load_dataset_for_character(ds_repo, ds_size) as (ch, ds_dir):
@@ -217,7 +217,8 @@ def export_workdir(workdir: str, export_dir: str, n_repeats: int = 2,
 
         print('This model is trained with [HCP-Diffusion](https://github.com/7eu7d7/HCP-Diffusion). '
               'And the auto-training framework is maintained by '
-              '[DeepGHS Team](https://huggingface.co/deepghs).', file=f)
+              '[DeepGHS Team](https://huggingface.co/deepghs).'
+              'And the WebUI Panel provid by [LittleAppleWebUI](https://github.com/LittleApple-fp16/LittleAppleWebUI)', file=f)
         print('', file=f)
 
         print('The base model used during training is [NAI](https://huggingface.co/deepghs/animefull-latest), '

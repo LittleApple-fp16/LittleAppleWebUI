@@ -3,7 +3,6 @@ try:
     import logging
     import sys
     import time
-
     import matplotlib
     import os
     import re
@@ -16,24 +15,34 @@ try:
     import webbrowser
     import asyncio
     from loguru import logger
+    from pypinyin import lazy_pinyin
     from PicImageSearch.model import Ascii2DResponse
     from PicImageSearch import Ascii2D, Network
     from littleapple.refresh_token import get_ref_token
     from littleapple.image_link import get_image_links, download_link
     from littleapple.kemono_dl.main import downloader as kemono_dl
     from littleapple.kemono_dl.args import get_args as kemono_args
+    from littleapple.train import run_train_plora
     from typing import Literal, cast
     from pixivpy3 import AppPixivAPI, PixivError
     from tqdm import tqdm
     from tqdm.contrib import tzip
-    from waifuc.action import HeadCountAction, AlignMinSizeAction, CCIPAction, ThreeStageSplitAction, ModeConvertAction, ClassFilterAction, PersonSplitAction, TaggingAction, RatingFilterAction, NoMonochromeAction, RandomFilenameAction, FirstNSelectAction, FilterSimilarAction
+    from waifuc.action import HeadCountAction, AlignMinSizeAction, CCIPAction, ThreeStageSplitAction, ModeConvertAction, ClassFilterAction, PersonSplitAction, TaggingAction, RatingFilterAction, NoMonochromeAction, RandomFilenameAction, FirstNSelectAction, FilterSimilarAction, FileExtAction
     from waifuc.export import SaveExporter, TextualInversionExporter
     from waifuc.source import DanbooruSource, PixivSearchSource, ZerochanSource, LocalSource, GcharAutoSource
-    from cyberharem.publish.__main__ import huggingface as cyber_hugging
-    from cyberharem.publish.__main__ import rehf as cyber_rehf
-    from cyberharem.publish.__main__ import civitai as cyber_civitai
+
+    from ditk import logging
+    from hbutils.system import TemporaryDirectory
+    from cyberharem.dataset import save_recommended_tags
+    from cyberharem.publish import find_steps_in_workdir
+    from cyberharem.utils import get_hf_fs as cyber_get_hf_fs
+    from cyberharem.utils import download_file as cyber_download_file
+    from cyberharem.publish.civitai import civitai_publish_from_hf
+    from cyberharem.publish.huggingface import deploy_to_huggingface
+    from huggingface_hub import hf_hub_url
+    from cyberharem.infer.draw import _DEFAULT_INFER_MODEL
+
     from PIL import Image
-    from train import run_train_plora
     from imgutils.data import load_image, load_images, rgb_encode, rgb_decode
     from imgutils.tagging import get_wd14_tags, get_mldanbooru_tags, drop_blacklisted_tags, drop_overlap_tags, tags_to_text
     from imgutils.metrics import ccip_difference, ccip_clustering, lpips_clustering
@@ -48,7 +57,7 @@ except ModuleNotFoundError:
     subprocess.run(['dependencies.bat'], check=True)
 
 matplotlib.use('Agg')
-
+logger.level("DEAD", no=5, color="<red>", icon="🤬")
 
 def download_images(source_type, character_name, p_min_size, p_background, p_class, p_rating, p_crop_person, p_auto_tagging, num_images, p_ai):
     global output_cache
@@ -56,7 +65,8 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
     rating_map = {0: 'safe', 1: 'r15', 2: 'r18'}
     # ratings_to_filter = set(rating_map.values()) - set([rating_map[i] for i in p_rating if i in rating_map])
     ratings_to_filter = set([rating_map[i] for i in p_rating if i in rating_map])
-    print("\n - 开始获取数据集")
+    gr.Info("开始获取数据集")
+    logger.info("\n - 开始获取数据集")
     character_list = character_name.split(',')
     for character in character_list:
         character = character.replace(' ', '_')  # 将空格替换为下划线
@@ -65,6 +75,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
             source_init = DanbooruSource([character, 'solo'])
         elif source_type == 'Pixiv':
             if not cfg.get('pixiv_token', ''):
+                gr.Warning("Pixiv未登录")
                 return "Pixiv访问令牌未设置"
             source_init = PixivSearchSource(
                 character,
@@ -74,12 +85,9 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
             # actions.append(CCIPAction())
         elif source_type == 'Zerochan':
             source_init = ZerochanSource([character, 'solo'])
-        elif source_type == '自动':
+        else:  # 自动
             source_init = GcharAutoSource(character, pixiv_refresh_token=cfg.get('pixiv_token', ''))
             # actions.append(CCIPAction())
-        else:
-            output_cache = []
-            return "图站错误"
         if p_class:
             if 0 in p_class:
                 actions.append(NoMonochromeAction())
@@ -96,7 +104,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
         if p_min_size:
             # print(int(p_min_size))
             actions.append(AlignMinSizeAction(min_size=int(p_min_size)))
-        actions.append(FilterSimilarAction('all'))
+        actions.append(FilterSimilarAction('all'))  # lpips差分过滤
         actions.append(ModeConvertAction('RGB', p_background))
         actions.append(HeadCountAction(1))
         actions.append(RandomFilenameAction(ext='.png'))
@@ -107,8 +115,9 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
             TextualInversionExporter(save_path)  # 将图片保存到指定路径
         )
         # print(ratings_to_filter)
+    gr.Info("数据集获取已结束")
     output_cache = []
-    return "已获取图片"
+    return "已获取数据集"
 
 
 def dataset_getImg(dataset_name):  # 请确保每个方法中只调用一次 由于tqdm
@@ -131,6 +140,7 @@ def dataset_getImg(dataset_name):  # 请确保每个方法中只调用一次 由
 def download_illust(i_name, i_source, i_maxsize=None):
     global pyapi
     global cfg
+    gr.Info("开始获取数据集")
     maxsize = round(float(i_maxsize), 1) if i_maxsize else None
     try:
         json_result = pyapi.search_user(i_name)
@@ -147,7 +157,7 @@ def download_illust(i_name, i_source, i_maxsize=None):
             }
         if 0 in i_source:
             links = get_image_links(illust['user']['id'], maxsize)
-            for url, name in tzip(links[0], links[1], file=sys.stdout, ascii="░▒█", desc=" - 数据集获取开始处理"):
+            for url, name in tzip(links[0], links[1], file=sys.stdout, ascii="░▒█", desc=" - 开始获取数据集"):
                 if not os.path.exists(f"dataset/{illust['user']['name']}"):
                     os.makedirs(f"dataset/{illust['user']['name']}")
                 download_link(url, f"dataset/{illust['user']['name']}/{name}.png")
@@ -155,8 +165,10 @@ def download_illust(i_name, i_source, i_maxsize=None):
         # return "已获取"+illust['user']['name']+"画师数据集"
         if 1 in i_source:
             kemono_dl(kemono_arg)
+        gr.Info(i_name+" 数据集获取已结束")
         return "下载已结束"
     except Exception as exp:
+        gr.Warning("数据集获取失败, 请查看控制台")
         print(f"[错误] - 获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须设置Kemono令牌才能获取Fanbox的内容\n你必须输入正确的画师名, 错误信息:{exp}")
         return "获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须设置Kemono令牌才能获取Fanbox的内容\n你必须输入正确的画师名"
 
@@ -212,6 +224,7 @@ def has_image(got_list):
 async def illu_getter(pic):
     global cfg
     global output_cache
+    gr.Info("开始获取画师信息")
     if cfg.get('proxie_enabled', False):
         proxies = 'http://'+cfg.get('proxie_ip', None)+':'+cfg.get('proxie_host', None)
     else:
@@ -228,14 +241,16 @@ async def illu_getter(pic):
                 break
         if selected is None:
             output_cache = []
+            gr.Warning("未找到对应画师")
             return "未找到", ""
         else:
             output_cache = []
+            gr.Info("画师 "+selected.author+"的作品 "+selected.title)
             return selected.author + " (" + selected.author_url + ") " + "的作品:" + selected.title, selected.author  # re.search(r'\d+$', selected.author_url).group()
 
 
-
 def clustering(dataset_name, thre):
+    gr.Info("差分过滤开始处理")
     global output_cache
     images = dataset_getImg(dataset_name)[0]
     # print(clusters)
@@ -248,11 +263,13 @@ def clustering(dataset_name, thre):
         elif cluster not in added_clusters:
             clustered_imgs.append(images[i])
             added_clusters.add(cluster)
+    gr.Info("差分过滤已结束")
     output_cache = clustered_imgs
     return clustered_imgs
 
 
 def three_stage(dataset_name):
+    gr.Info("三阶分割开始处理")
     global output_cache
     if dataset_name.endswith("_processed"):
         process_dir = f"dataset/{dataset_name}"
@@ -262,6 +279,7 @@ def three_stage(dataset_name):
     local_source.attach(
         ThreeStageSplitAction(),
     ).export(TextualInversionExporter(process_dir, True))
+    gr.Info("三阶分割已结束")
     output_cache = []
     return "已保存至"+process_dir+"文件夹"
 
@@ -282,6 +300,7 @@ def three_stage(dataset_name):
 
 def face_detect(dataset_name, level, version, max_infer_size, conf_threshold, iou_threshold):
     global output_cache
+    gr.Info("面部检测开始处理")
     images = dataset_getImg(dataset_name)[0]
     detected = []
     if level:
@@ -292,12 +311,14 @@ def face_detect(dataset_name, level, version, max_infer_size, conf_threshold, io
     # print("   *将返回区域结果")
     for img in tqdm(images, file=sys.stdout, desc=" - 面部检测开始处理", ascii="░▒█"):
         detected.append(detect_faces(img, level, version, max_infer_size, conf_threshold, iou_threshold))
+    gr.Info("面部检测已结束")
     output_cache = detected
     return detected
 
 
 def head_detect(dataset_name, level, max_infer_size, conf_threshold, iou_threshold):
     global output_cache
+    gr.Info("头部检测开始处理")
     images = dataset_getImg(dataset_name)[0]
     detected = []
     if level:
@@ -308,16 +329,19 @@ def head_detect(dataset_name, level, max_infer_size, conf_threshold, iou_thresho
     # print("   *将返回区域结果")
     for img in tqdm(images, file=sys.stdout, ascii="░▒█", desc=" - 头部检测开始处理"):
         detected.append(detect_heads(img, level, max_infer_size, conf_threshold, iou_threshold))
+    gr.Info("头部检测已结束")
     output_cache = detected
     return detected
 
 
 def text_detect(dataset_name):
     global output_cache
+    gr.Info("文本检测开始处理")
     images = dataset_getImg(dataset_name)[0]
     detected = []
     for img in tqdm(images, file=sys.stdout, ascii="░▒█", desc=" - 文本检测开始处理"):
         detected.append(detect_text_with_ocr(img))
+    gr.Info("文本检测已结束")
     output_cache = detected
     return detected
 
@@ -325,6 +349,7 @@ def text_detect(dataset_name):
 def area_fill(dataset_name, is_random, color):
     global output_cache
     area = output_cache
+    gr.Info("区域填充开始处理")
     images = dataset_getImg(dataset_name)[0]
     fill = []
     xyxy = []
@@ -342,6 +367,7 @@ def area_fill(dataset_name, is_random, color):
     # os.makedirs(f"processed/{dataset_name}", exist_ok=True)
     # for i, sv in enumerate(fill):
     #     sv.save(f"processed/{dataset_name}/{dataset_name}_AreaFill_{i+1}.png")
+    gr.Info("区域填充已结束")
     output_cache = fill
     return fill
 
@@ -349,6 +375,7 @@ def area_fill(dataset_name, is_random, color):
 def area_blur(dataset_name, rad):
     global output_cache
     area = output_cache
+    gr.Info("区域模糊开始处理")
     images = dataset_getImg(dataset_name)[0]
     blur = []
     xyxy = []
@@ -360,12 +387,14 @@ def area_blur(dataset_name, rad):
         else:
             blur.append(img)
     output_cache = blur
+    gr.Info("区域模糊已结束")
     return blur
 
 
 def crop_hw(dataset_name):
     global output_cache
     mask_info = output_cache
+    gr.Info("区域剪裁开始处理")
     images = dataset_getImg(dataset_name)[0]
     result = []
     for img, infos in zip(images, mask_info):
@@ -384,6 +413,7 @@ def crop_hw(dataset_name):
                 # print(mask)
             else:
                 output_cache = []
+                gr.Warning("区域剪裁: 当前运行结果不支持剪裁")
                 return "此内容不支持剪裁"
             result.append(squeeze(img, mask))
     output_cache = result
@@ -392,23 +422,27 @@ def crop_hw(dataset_name):
 
 def crop_trans(dataset_name, threshold, filter_size):
     global output_cache
+    gr.Info("自适应裁剪开始处理")
     images = dataset_getImg(dataset_name)[0]
     out = []
     # print(" - 自适应裁剪开始处理")
     for img in tqdm(images, file=sys.stdout, desc=" - 自适应裁剪开始处理", ascii="░▒█"):
         if img is not None:
             out.append(squeeze_with_transparency(img, threshold, filter_size))
+    gr.Info("自适应裁剪已结束")
     output_cache = out
     return out
 
 
 def img_segment(dataset_name, scale):
     global output_cache
+    gr.Info("人物分离开始处理")
     images = dataset_getImg(dataset_name)[0]
     out = []
     # print(" - 人物分离开始处理")
     for img in tqdm(images, file=sys.stdout, desc=" - 人物分离开始处理", ascii="░▒█"):
         out.append(segment_rgba_with_isnetis(img, scale)[1])  # mask信息被丢弃了
+    gr.Info("人物分离已结束")
     output_cache = out
     return out
 
@@ -424,6 +458,7 @@ def ref_datasets(need_list=False):
     if need_list:
         return list_datasets
     else:
+        gr.Info("数据集已更新")
         return gr.Dropdown.update(choices=list_datasets)
 
 
@@ -437,6 +472,7 @@ def ref_customList(need_list=False):
     if need_list:
         return custom_blacklist
     else:
+        gr.Info("标签黑名单已更新")
         return gr.Dropdown.update(choices=custom_blacklist)
 
 
@@ -459,17 +495,20 @@ def ref_runs(dataset_name, need_list=False):
         if need_list:
             return runs_list
         else:
+            gr.Info("训练结果已更新")
             # print("结果"+str(runs_list))
             return gr.Dropdown.update(choices=runs_list)
 
 
 def convert_weights(dataset_name, step):
     global output_cache
+    gr.Info("开始转换LoRA")
     # logging.try_init_root(logging.INFO)
     convert_to_webui_lora(f"runs/{dataset_name}/ckpts/unet-{step}.safetensors",
                           f"runs/{dataset_name}/ckpts/text_encoder-{step}.safetensors",
                           os.path.join(f"runs/{dataset_name}/ckpts", f"{dataset_name}-lora-{step}.safetensors")
                           )
+    gr.Info("LoRA转换已结束")
     output_cache = []
     return "已执行转换"
 
@@ -548,6 +587,7 @@ def saving_output(dataset_name):
     else:
         process_dir = f"dataset/{dataset_name}_processed"
     if has_image(output_cache):
+        gr.Info("开始保存运行结果")
         os.makedirs(process_dir, exist_ok=True)
         anyfiles = os.listdir(process_dir)
         # print(" - 开始保存运行结果")
@@ -556,8 +596,11 @@ def saving_output(dataset_name):
         for i, sv in enumerate(tqdm(output_cache, file=sys.stdout, desc=" - 开始保存运行结果", ascii="░▒█")):
             sv.save(f"{process_dir}/{dataset_name}_{i+1}.png")
             count = count+1
+        gr.Info("已保存"+str(count)+" 张图像至"+process_dir+"数据集")
         output_cache = []
-        return "已保存 "+str(count)+" 张图片至"+process_dir+"文件夹"
+        return "已保存 "+str(count)+" 张图像至"+process_dir+"数据集"
+    else:
+        gr.Warning("无法保存: 运行结果内没有图像")
 
 
 def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_character_thre, wd14_weight, wd14_overlap, ml_real_name, ml_thre, ml_scale, ml_weight, ml_ratio, ml_overlap, need_black, drop_presets, drop_custom, exists_txt, del_json):
@@ -566,6 +609,7 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
     img_name = dataset_getImg(dataset_name)[1]
     result = []
     if ttype == taggers[0]:
+        gr.Info("数据打标开始处理 打标器: wd14")
         # print(" - 数据打标开始处理")
         for img, name in tzip(images, img_name, file=sys.stdout, ascii="░▒█", desc=" - 数据打标开始处理"):
             result = get_wd14_tags(img, wd14_tagger, wd14_general_thre, wd14_character_thre, wd14_overlap)
@@ -594,7 +638,9 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
                 else:
                     with open(f'dataset/{dataset_name}/{name}.txt', 'w') as tag:
                         tag.write(result)
+        gr.Info("数据打标已结束")
     elif ttype == taggers[1]:
+        gr.Info("数据打标开始处理 打标器: mldanbooru")
         # print(" - 数据打标开始处理")
         for img, name in tzip(images, img_name, file=sys.stdout, ascii="░▒█", desc=" - 数据打标开始处理"):
             result = get_mldanbooru_tags(img, ml_real_name, ml_thre, ml_scale, ml_ratio, ml_overlap)
@@ -620,7 +666,9 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
                 else:
                     with open(f'dataset/{dataset_name}/{name}.txt', 'w') as tag:
                         tag.write(result)
+        gr.Info("数据打标已结束")
     elif ttype == taggers[2]:
+        gr.Info("标签解析开始处理")
         json_files = glob.glob(f'dataset/{dataset_name}/.*.json')
         # print(" - 标签解析开始处理")
         for json_file in tqdm(json_files, file=sys.stdout, desc=" - 标签解析开始处理", ascii="░▒█"):
@@ -634,6 +682,7 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
             if tag_json_character:
                 tag_json_character = tag_json_character.replace(' ', ', ')
             if tag_json_general is None and tag_json_character is None:
+                gr.Warning("标签解析: 数据集内无json标签")
                 output_cache = []
                 return "无标签"
             elif tag_json_general is None:
@@ -664,6 +713,7 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
                         f.write(tag_json)
                 if del_json:
                     os.remove(json_file)
+        gr.Info("标签解析已结束")
 
 
 # @gr.StateHandler
@@ -689,19 +739,21 @@ def illu_source_limit(i_source):
     return updates
 
 
-def save_settings(p_token, f_cookie, pro_ip, pro_host, pro_enabled, theme):
+def save_settings(p_token, f_cookie, c_token, pro_ip, pro_host, pro_enabled, theme):
     global cfg
     cfg['pixiv_token'] = p_token
     cfg['fanbox_cookie'] = f_cookie
+    cfg['civitai_token'] = c_token
     cfg['proxie_ip'] = pro_ip
     cfg['proxie_host'] = pro_host
     cfg['proxie_enabled'] = pro_enabled
     cfg['theme'] = theme
     with open('config.json', 'w') as f:
         json.dump(cfg, f, ensure_ascii=False, indent=4)
+    gr.Info("设置已保存")
     load_settings()
     # 刷新设置页面
-    return "已保存设置"
+    return "设置已保存"
 
 
 def load_settings():
@@ -711,6 +763,7 @@ def load_settings():
             cfg = json.load(config)
     else:
         cfg = {}
+    gr.Info("设置已读取")
 
 
 def pixiv_login():
@@ -720,46 +773,124 @@ def pixiv_login():
     for _ in range(3):
         try:
             pyapi.auth(refresh_token=cfg.get('pixiv_token', ''))
-            print("[信息] - Pixiv已登录")
+            gr.Info("Pixiv已登录")
+            print("[信息] - Pixiv登录成功")
             break
         except PixivError:
             time.sleep(10)
         if not cfg.get('pixiv_token', ''):
+            gr.Warning("Pixiv登录失败，因为没有设置访问令牌")
             print("[警告] - Pixiv登录失败，因为没有设置访问令牌")
             break
     else:
+        gr.Warning("Pixiv登录失败")
         print("[警告] - Pixiv登录失败，已尝试三次，请前往设置检查刷新令牌，并尝试重新登录")
 
 
 def pipeline_start(ch_names):
     global output_cache
     global cfg
-    actions = [NoMonochromeAction(), CCIPAction(), PersonSplitAction(),
+    actions = [NoMonochromeAction(), CCIPAction(), PersonSplitAction(),  # ccip角色聚类
                HeadCountAction(1), TaggingAction(force=True),
-               FilterSimilarAction('all'), ModeConvertAction('RGB'),
+               FilterSimilarAction('all'), ModeConvertAction('RGB'),  # FilterSimilar: lpips差分过滤
+               FileExtAction(ext='.png'),  # png格式质量无损
                FirstNSelectAction(700)]  # 700+
     ch_list = ch_names.split(',')
     for ch in ch_list:
+        gr.Info("["+ch+"]"+" 全自动训练开始")
         ch = ch.replace(' ', '_')
-        save_path = "pipeline\\dataset\\" + ch
-        # source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
-        # source_init.attach(*actions).export(
-        #     TextualInversionExporter(save_path)
-        # )
-        run_train_plora(ch, ch, None, 8, 4, is_pipeline=True)
+        ch_e = re.sub(r'[^\w\s()]', '', ''.join([word if not (u'\u4e00' <= word <= u'\u9fff') else lazy_pinyin(ch)[i] for i, word in enumerate(ch)]))
+        save_path = "pipeline\\dataset\\" + ch_e
+        source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+        source_init.attach(*actions).export(
+            TextualInversionExporter(save_path)
+        )
+        run_train_plora(ch_e, ch_e, None, 8, 12, is_pipeline=True)  # bs, epoch
+
+        def huggingface(workdir: str, repository, revision, n_repeats, pretrained_model,
+                        width, height, clip_skip, infer_steps):
+            logging.try_init_root(logging.INFO)
+            deploy_to_huggingface(
+                workdir, repository, revision, n_repeats, pretrained_model,
+                clip_skip, width, height, infer_steps, ds_dir=save_path
+            )
+
+        def rehf(repository, revision, n_repeats, pretrained_model,
+                 width, height, clip_skip, infer_steps):
+            logging.try_init_root(logging.INFO)
+            with TemporaryDirectory() as workdir:
+                logging.info(f'Downloading models for {workdir!r} ...')
+                hf_fs = cyber_get_hf_fs()
+                for f in tqdm(hf_fs.glob(f'{repository}/*/raw/*')):
+                    rel_file = os.path.relpath(f, repository)
+                    local_file = os.path.join(workdir, 'ckpts', os.path.basename(rel_file))
+                    if os.path.dirname(local_file):
+                        os.makedirs(os.path.dirname(local_file), exist_ok=True)
+                    cyber_download_file(
+                        hf_hub_url(repository, filename=rel_file),
+                        local_file
+                    )
+
+                logging.info(f'Regenerating tags for {workdir!r} ...')
+                pt_name, _ = find_steps_in_workdir(workdir)
+                game_name = pt_name.split('_')[-1]
+                name = '_'.join(pt_name.split('_')[:-1])
+
+                from gchar.games.dispatch.access import GAME_CHARS
+                if game_name in GAME_CHARS:
+                    ch_cls = GAME_CHARS[game_name]
+                    ch = ch_cls.get(name)
+                else:
+                    ch = None
+
+                if ch is None:
+                    source = repository
+                else:
+                    source = ch
+
+                logging.info(f'Regenerate tags for {source!r}, on {workdir!r}.')
+                save_recommended_tags(source, name=pt_name, workdir=workdir)
+                logging.info('Success!')
+
+                deploy_to_huggingface(
+                    workdir, repository, revision, n_repeats, pretrained_model,
+                    clip_skip, width, height, infer_steps,
+                )
+
+        def civitai(repository, title, steps, epochs, draft, publish_time, allow_nsfw,
+                    version_name, force_create, no_ccip_check, session=None):
+            logging.try_init_root(logging.INFO)
+            model_id = civitai_publish_from_hf(
+                repository, title,
+                step=steps, epoch=epochs, draft=draft,
+                publish_at=publish_time, allow_nsfw_images=allow_nsfw,
+                version_name=version_name, force_create_model=force_create,
+                no_ccip_check=no_ccip_check, session=session
+            )
+            url = f'https://civitai.com/models/{model_id}'
+            if not draft:
+                logging.info(f'Deploy success, model now can be seen at {url} .')
+            else:
+                logging.info(f'Draft created, it can be seed at {url} .')
+
+        # huggingface(workdir='pipeline\\runs\\' + ch_e, repository=None, n_repeats=3, pretrained_model=_DEFAULT_INFER_MODEL, width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
+        # rehf(repository=ch_e, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
+        # civitai(repository=ch_e, draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=cfg.get('civitai_token', ''), epochs=None, publish_time=None, steps=None, title=None, version_name=None)
         try:
-            cyber_hugging(workdir='pipeline\\runs\\' + ch, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30)
-        except Exception as e:
-            print(" - 发生错误 但还活着:", e)
-        try:
-            cyber_rehf(workdir='pipeline\\runs\\' + ch, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30)
-        except Exception as e:
-            print(" - 发生错误 但还活着:", e)
-        try:
-            cyber_civitai(repository=ch, draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=cfg.get('civitai_token', ''))
+            huggingface(workdir='pipeline\\runs\\' + ch_e, repository=None, n_repeats=3, pretrained_model=_DEFAULT_INFER_MODEL, width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
         except Exception as e:
             print(" - 错误:", e)
+        try:
+            rehf(repository=ch_e, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
+        except Exception as e:
+            print(" - 错误:", e)
+        try:
+            civitai(repository=ch_e, draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=cfg.get('civitai_token', ''), epochs=None, publish_time=None, steps=None, title=None, version_name=None)
+        except Exception as e:
+            print(" - 错误:", e)
+        gr.Info("["+ch+"]" + " 全自动训练完成")
         print("已完成"+ch+"角色上传")
+    gr.Info("所有全自动训练任务完成")
     return "所有任务完成"
 
 
@@ -969,7 +1100,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
         with gr.Accordion("使用说明", open=False):
             gr.Markdown("《输入角色名然后你的模型就出现在c站了》\n"
                         "需要在设置中设置c站token\n"
-                        "需要在计算机中添加环境变量: 键名 HF_TOKEN 值: 从登录的HuggingFace网站获取")
+                        "需要在计算机中添加环境变量: 键名 HF_TOKEN 值: 从登录的HuggingFace网站获取 在账号设置中创建访问令牌")
     with gr.Tab("设置"):
         with gr.Tab("Pixiv"):
             pixiv_token = gr.Textbox(label="刷新令牌", placeholder="不填写将无法访问Pixiv", interactive=True, value=cfg.get('pixiv_token', ''))
@@ -1010,7 +1141,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
         message_output.change(save_output_ctrl, [], save_output)
     # dl_count.change(None, )
     pipeline_button.click(pipeline_start, [pipeline_text], [message_output])
-    setting_save_button.click(save_settings, [pixiv_token, fanbox_cookie, proxie_ip, proxie_host, proxie_enabled, theme_select], [message_output])
+    setting_save_button.click(save_settings, [pixiv_token, fanbox_cookie, civitai_token, proxie_ip, proxie_host, proxie_enabled, theme_select], [message_output])
     pixiv_manual_login.click(pixiv_login, [], [])
     pixiv_get_token.click(get_ref_token, [], [])
     fanbox_get_cookie.click(get_fanbox_cookie, [], [])
@@ -1042,4 +1173,5 @@ if __name__ == "__main__":
     # log.info(f"Server started at http://{args.host}:{args.port}")
     if sys.platform == "win32":
         webbrowser.open(f"http://127.0.0.1:{args.port}" + ("?__theme=dark" if cfg.get('theme', '亮色') == '黑色' else ""))
+    iblock.queue()
     iblock.launch(server_port=args.port, server_name=args.host, share=args.share)

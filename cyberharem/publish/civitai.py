@@ -551,7 +551,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                             draft: bool = False, publish_at=None, allow_nsfw_images: bool = True,
                             force_create_model: bool = False, no_ccip_check: bool = False, session=None):
     if isinstance(source, Character):
-        repo = f'CyberHarem/{get_ch_name(source)}'
+        repo = f'AppleHarem/{get_ch_name(source)}'
     elif isinstance(source, str):
         repo = source
     else:
@@ -779,6 +779,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
 
         This model is trained with [HCP-Diffusion](https://github.com/7eu7d7/HCP-Diffusion). 
         And the auto-training framework is maintained by [DeepGHS Team](https://huggingface.co/deepghs).
+        And the WebUI Panel provid by [LittleAppleWebUI](https://github.com/LittleApple-fp16/LittleAppleWebUI)
 
         ## Why Some Preview Images Not Look Like {" ".join(map(str.capitalize, trigger_word.split("_")))}
 

@@ -8,7 +8,7 @@ model:
 character_name: 
 dataset_dir: 
 # if exp_dir is not set, a random time-based directory will be used
-exp_dir: 'exps/surtr'
+# exp_dir: 'exps/surtr'
 
 unet_rank: 8
 text_encoder_rank: 4

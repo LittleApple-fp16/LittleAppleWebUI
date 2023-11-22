@@ -146,14 +146,14 @@ def crawl_dataset_to_huggingface(
         name = f'{source.enname} ({source.__official_name__})'
 
         if not repository:
-            repository = f'CyberHarem/{get_ch_name(source)}'
+            repository = f'AppleHarem/{get_ch_name(source)}'
 
     else:
         if name is None:
             raise ValueError('Name must be specified when source is not str or character.')
 
         if not repository:
-            repository = f'CyberHarem/{get_alphabet_name(name)}'
+            repository = f'AppleHarem/{get_alphabet_name(name)}'
 
     origin_source = get_main_source(source, no_r18, bg_color, no_monochrome_check, drop_multi, skip_preprocess)
     with TemporaryDirectory() as td:
@@ -250,7 +250,8 @@ def crawl_dataset_to_huggingface(
 
             print(f'Images are crawled from many sites (e.g. danbooru, pixiv, zerochan ...), '
                   f'the auto-crawling system is powered by [DeepGHS Team](https://github.com/deepghs)'
-                  f'([huggingface organization](https://huggingface.co/deepghs)).', file=rf)
+                  f'([huggingface organization](https://huggingface.co/deepghs)).'
+                  f'([LittleAppleWebUI](https://github.com/LittleApple-fp16/LittleAppleWebUI))', file=rf)
             print(f'', file=rf)
 
             df = pd.DataFrame(columns=columns, data=rows)

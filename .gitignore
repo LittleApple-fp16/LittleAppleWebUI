@@ -1217,7 +1217,6 @@ fabric.properties
 /.train
 *.pt
 /YOLOv8
-deepghs/animefull-latest
 /venv
 /dataset
 /cfgs
