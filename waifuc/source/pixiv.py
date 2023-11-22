@@ -1,17 +1,12 @@
 import logging
 import os
-from typing import Iterator, Optional, Union, Tuple
+from typing import Iterator, Optional, Union, Tuple, Literal
 
 from hbutils.system import urlsplit
 from pixivpy3 import AppPixivAPI
 
 from .web import WebDataSource
 from ..utils import get_requests_session
-
-try:
-    from typing import Literal
-except (ImportError, ModuleNotFoundError):
-    from typing_extensions import Literal
 
 _FILTER = Literal["for_ios", ""]
 _TYPE = Literal["illust", "manga", ""]
@@ -56,7 +51,7 @@ class BasePixivSource(WebDataSource):
         WebDataSource.__init__(self, group_name, self.client.requests, download_silent)
 
     def _iter_illustration(self) -> Iterator[dict]:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def _iter_data(self) -> Iterator[Tuple[Union[str, int], str, dict]]:
         if self.refresh_token:

@@ -1,17 +1,12 @@
 import os
 from enum import Enum
-from typing import Iterator, Union, List, Optional, Mapping, Tuple
-from urllib.parse import quote_plus
+from typing import Iterator, Union, List, Optional, Mapping, Tuple, Literal
+from urllib.parse import quote_plus, urljoin
 
 from hbutils.system import urlsplit
 
 from .web import WebDataSource
 from ..utils import get_requests_session, srequest
-
-try:
-    from typing import Literal
-except (ImportError, ModuleNotFoundError):
-    from typing_extensions import Literal
 
 
 class Sort(str, Enum):
@@ -42,7 +37,7 @@ class ZerochanSource(WebDataSource):
     def __init__(self, word: Union[str, List[str]], sort: Sort = Sort.FAV, time: Time = Time.ALL,
                  dimension: Optional[Dimension] = None, color: Optional[str] = None, strict: bool = False,
                  select: SelectTyping = 'large', group_name: str = 'zerochan', download_silent: bool = True,
-                 user_agent=None):
+                 user_agent=None, username: Optional[str] = None, password: Optional[str] = None):
         if user_agent:
             headers = {'User-Agent': user_agent}
         else:
@@ -55,6 +50,34 @@ class ZerochanSource(WebDataSource):
         self.color = color
         self.strict = strict
         self.select = select
+
+        self.username = username
+        self._password = password
+        self._is_authed = False
+
+    def _auth(self):
+        if not self._is_authed and self.username is not None:
+            resp = self.session.post(
+                'https://www.zerochan.net/login',
+                data={
+                    'ref': '/',
+                    'name': self.username,
+                    'password': self._password,
+                    'login': 'Login'
+                },
+                headers={
+                    'Referrer': "https://www.zerochan.net/login?ref=%2F",
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,'
+                              'image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                allow_redirects=False,
+            )
+            if resp.status_code != 303:
+                raise ConnectionError('Username or password wrong, failed to login to zerochan.net.')
+
+            self._is_authed = True
 
     @property
     def _base_url(self) -> str:
@@ -111,14 +134,26 @@ class ZerochanSource(WebDataSource):
             return urls['medium']
 
     def _iter_data(self) -> Iterator[Tuple[Union[str, int], str, dict]]:
+        self._auth()
         page = 1
         while True:
-            resp = srequest(self.session, 'GET', self._base_url,
-                            params={**self._params, 'p': str(page), 'l': '200'},
-                            raise_for_status=False)
-            if resp.status_code in {403, 404}:
+            quit_ = False
+            _base_url = self._base_url
+            while True:
+                resp = srequest(self.session, 'GET', _base_url,
+                                params={**self._params, 'p': str(page), 'l': '200'},
+                                allow_redirects=False, raise_for_status=False)
+                if resp.status_code // 100 == 3:
+                    _base_url = urljoin(_base_url, resp.headers['Location'])
+                elif resp.status_code in {403, 404}:
+                    quit_ = True
+                    break
+                else:
+                    resp.raise_for_status()
+                    break
+
+            if quit_:
                 break
-            resp.raise_for_status()
 
             json_ = resp.json()
             if 'items' in json_:

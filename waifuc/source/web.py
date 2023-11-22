@@ -23,11 +23,11 @@ class WebDataSource(RootDataSource):
         self.group_name = group_name
 
     def _iter_data(self) -> Iterator[Tuple[Union[str, int], str, dict]]:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def _iter(self) -> Iterator[ImageItem]:
         for id_, url, meta in self._iter_data():
-            with TemporaryDirectory() as td:
+            with TemporaryDirectory(ignore_cleanup_errors=True) as td:
                 _, ext_name = os.path.splitext(urlsplit(url).filename)
                 filename = f'{self.group_name}_{id_}{ext_name}'
                 td_file = os.path.join(td, filename)
@@ -44,14 +44,6 @@ class WebDataSource(RootDataSource):
                 except (IOError, DecompressionBombError) as err:
                     warnings.warn(f'Skipped due to error: {err!r}')
                     continue
-                except NotADirectoryError as e:
-                    print(" - 异常:", e)
-                    # os.remove(td)
-                    td.cleanup()
-                    continue
-                # finally:
-                    # print(td)
-                    # td.cleanup()
 
                 meta = {**meta, 'url': url}
                 yield ImageItem(image, meta)
