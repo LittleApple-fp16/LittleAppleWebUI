@@ -109,7 +109,8 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
         actions.append(HeadCountAction(1))
         actions.append(RandomFilenameAction(ext='.png'))
         # logger.debug(cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter)))
-        actions.append(RatingFilterAction(ratings=cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter))))
+        if ratings_to_filter:
+            actions.append(RatingFilterAction(ratings=cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter))))
         actions.append(FirstNSelectAction(int(num_images)))
         source_init.attach(*actions).export(  # 只下载前num_images张图片
             TextualInversionExporter(save_path)  # 将图片保存到指定路径
