@@ -18,10 +18,7 @@ SET PYTHON=%userinput%
     echo [初始化] 正在安装依赖...
     python -m pip install --upgrade pip
     pip install -r requirements.txt
-    echo [信息] 完成，请手动安装pytorch：
-    echo [信息] 请打开environment.bat运行torch的安装
-    echo [信息] torch的安装需要良好网络连接
-    echo [信息] 安装命令 pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
+    echo [信息] 完成，请再次启动
     pause
 ) else (
     echo [自检] 检测到虚拟环境

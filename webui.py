@@ -1,5 +1,3 @@
-import cutlet
-
 try:
     import io
     import logging
@@ -16,6 +14,7 @@ try:
     import argparse
     import webbrowser
     import asyncio
+    from pykakasi import kakasi
     from loguru import logger
     from pypinyin import lazy_pinyin
     from PicImageSearch.model import Ascii2DResponse
@@ -793,7 +792,7 @@ def pixiv_login():
 def pipeline_start(ch_names):
     global output_cache
     global cfg
-    riyu = cutlet.Cutlet()
+    riyu = kakasi()
     actions = [NoMonochromeAction(), CCIPAction(), PersonSplitAction(),  # ccip角色聚类
                HeadCountAction(1), TaggingAction(force=True),
                FilterSimilarAction('all'), ModeConvertAction('RGB'),  # FilterSimilar: lpips差分过滤
@@ -803,12 +802,12 @@ def pipeline_start(ch_names):
     for ch in ch_list:
         gr.Info("["+ch+"]"+" 全自动训练开始")
         ch = ch.replace(' ', '_')
-        ch_e = riyu.romaji(re.sub(r'[^\w\s()]', '', ''.join([word if not (u'\u4e00' <= word <= u'\u9fff') else lazy_pinyin(ch)[i] for i, word in enumerate(ch)]))).replace(' ', '_')
+        ch_e = ''.join([r['hepburn']for r in riyu.convert(re.sub(r'[^\w\s()]', '', ''.join([word if not (u'\u4e00' <= word <= u'\u9fff') else lazy_pinyin(ch)[i] for i, word in enumerate(ch)])))]).replace(' ', '_')
         save_path = "pipeline\\dataset\\" + ch_e
-        source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
-        source_init.attach(*actions).export(
-            TextualInversionExporter(save_path)
-        )
+        # source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+        # source_init.attach(*actions).export(
+        #     TextualInversionExporter(save_path)
+        # )
         run_train_plora(ch_e, ch_e, None, 16, 10, is_pipeline=True)  # bs, epoch 32 25
 
         def huggingface(workdir: str, repository, revision, n_repeats, pretrained_model,

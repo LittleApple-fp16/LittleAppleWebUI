@@ -196,4 +196,8 @@ beautifulsoup4==4.12.2
 yt_dlp==2022.4.8
 PicImageSearch==3.9.6
 pypinyin==0.49.0
-cutlet==0.3.0
+pykakasi==2.2.1
+
+torch==2.0.1 --find-links https://download.pytorch.org/whl/cu118
+torchvision==0.15.2 --find-links https://download.pytorch.org/whl/cu118
+torchaudio==2.0.2 --find-links https://download.pytorch.org/whl/cu118
