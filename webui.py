@@ -1112,12 +1112,15 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
                         "需要在设置中设置c站token\n"
                         "需要在计算机中添加环境变量: 键名 HF_TOKEN 值: 从登录的HuggingFace网站获取 在账号设置中创建访问令牌")
     with gr.Tab("全自动数据集"):
-        gr.load("LittleApple-fp16/AppleBlock-1", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
+        try:
+            gr.load("AppleHarem/AppleBlock-1", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
+        except Exception as e:
+            logger.error("由于以下原因，全自动数据集未能加载: ", e)
         with gr.Accordion("使用说明", open=False):
             gr.Markdown("《输入角色名然后你的数据集就出现在抱脸了》\n"
                         "需要输入抱脸token\n"
-                        "你必须拥有组织的访问权限\n"
-                        "如果此页未加载，表示网络问题或暂时无法使用")
+                        "你必须拥有组织的访问权限才能查看此页面\n"
+                        "如果此页仍未加载，表示网络问题或暂时无法使用")
     with gr.Tab("设置"):
         with gr.Tab("Pixiv"):
             pixiv_token = gr.Textbox(label="刷新令牌", placeholder="不填写将无法访问Pixiv", interactive=True, value=cfg.get('pixiv_token', ''))
