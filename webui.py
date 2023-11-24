@@ -109,14 +109,20 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
         actions.append(FilterSimilarAction('all'))  # lpips差分过滤
         actions.append(ModeConvertAction('RGB', p_background))
         actions.append(HeadCountAction(1))
-        actions.append(RandomFilenameAction(ext='.png'))
+        # actions.append(RandomFilenameAction(ext='.png'))
+        actions.append(FileExtAction(ext='.png'))  # png格式质量无损
         # logger.debug(cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter)))
         if ratings_to_filter != set(rating_map.values()):
             actions.append(RatingFilterAction(ratings=cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter))))
         actions.append(FirstNSelectAction(int(num_images)))
-        source_init.attach(*actions).export(  # 只下载前num_images张图片
-            TextualInversionExporter(save_path)  # 将图片保存到指定路径
-        )
+        if source_type == 'Danbooru' and not p_auto_tagging:
+            source_init.attach(*actions).export(  # 只下载前num_images张图片
+                SaveExporter(save_path)  # 将图片保存到指定路径
+            )
+        else:
+            source_init.attach(*actions).export(  # 只下载前num_images张图片
+                TextualInversionExporter(save_path)  # 将图片保存到指定路径
+            )
         # logger.debug(ratings_to_filter)
     gr.Info("数据集获取已结束")
     output_cache = []
@@ -805,10 +811,10 @@ def pipeline_start(ch_names):
         ch = ch.replace(' ', '_')
         ch_e = ''.join([r['hepburn']for r in riyu.convert(re.sub(r'[^\w\s()]', '', ''.join([word if not (u'\u4e00' <= word <= u'\u9fff') else lazy_pinyin(ch)[i] for i, word in enumerate(ch)])))]).replace(' ', '_')
         save_path = "pipeline\\dataset\\" + ch_e
-        source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
-        source_init.attach(*actions).export(
-            TextualInversionExporter(save_path)
-        )
+        # source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+        # source_init.attach(*actions).export(
+        #     TextualInversionExporter(save_path)
+        # )
         run_train_plora(ch_e, ch_e, None, 16, 10, is_pipeline=True)  # bs, epoch 32 25
 
         def huggingface(workdir: str, repository, revision, n_repeats, pretrained_model,
@@ -934,7 +940,7 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
             with gr.Column(visible=False) as pixiv_settings:
                 pixiv_no_ai = gr.Checkbox(label="非AI生成", interactive=True, value=False)
             source.select(pixiv_setting_ctrl, None, [pixiv_settings])
-            dl_count = gr.Textbox(label="下载数量", value='10', placeholder="无上限")
+            dl_count = gr.Textbox(label="下载数量", value='100', placeholder="无上限")
             # dl_count = gr.Slider(1, 1001, step=1, value=10, label="下载数量", elem_id='dl_count')
             # save_path = gr.Textbox(label='保存路径', value='dataset', placeholder='自动创建子文件夹')
             download_button = gr.Button("获取图片", variant="primary", interactive=True)
@@ -1116,22 +1122,22 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
             try:
                 gr.load("AppleHarem/AppleBlock-1", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
             except Exception as e:
-                logger.warning("由于以下原因，全自动数据集-1机未能加载: ", e)
+                logger.warning("[警告] - 全自动数据集-1机未能加载: "+str(e))
         with gr.Tab("2机"):
             try:
                 gr.load("AppleHarem/AppleBlock-2", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
             except Exception as e:
-                logger.warning("由于以下原因，全自动数据集-2机未能加载: ", e)
+                logger.warning("[警告] - 全自动数据集-2机未能加载: "+str(e))
         with gr.Tab("3机"):
             try:
                 gr.load("AppleHarem/AppleBlock-3", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
             except Exception as e:
-                logger.warning("由于以下原因，全自动数据集-3机未能加载: ", e)
+                logger.warning("[警告] - 全自动数据集-3机未能加载: "+str(e))
         with gr.Accordion("使用说明", open=False):
             gr.Markdown("《输入角色名然后你的数据集就出现在抱脸了》\n"
                         "需要输入抱脸token\n"
                         "你必须拥有组织的访问权限才能查看此页面\n"
-                        "如果此页仍未加载，表示网络问题或暂时无法使用")
+                        "如果此页仍未加载，表示网络问题或机器已离线")
     with gr.Tab("设置"):
         with gr.Tab("Pixiv"):
             pixiv_token = gr.Textbox(label="刷新令牌", placeholder="不填写将无法访问Pixiv", interactive=True, value=cfg.get('pixiv_token', ''))

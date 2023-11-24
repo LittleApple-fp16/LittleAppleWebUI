@@ -64,7 +64,7 @@ gradio_client==0.7.0
 grpcio==1.59.0
 h11==0.14.0
 hbutils==0.9.1
-hcpdiff @ git+https://github.com/LittleApple-fp16/HCP-Diffusion.git@32124da932ef8ec7c50fc55566b8d5b39c9d2308
+hcpdiff @ git+https://github.com/IrisRainbowNeko/HCP-Diffusion
 httpcore==0.18.0
 httpx==0.25.1
 huggingface_hub==0.19.4
