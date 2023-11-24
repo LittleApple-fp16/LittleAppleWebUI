@@ -1112,10 +1112,21 @@ with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
                         "需要在设置中设置c站token\n"
                         "需要在计算机中添加环境变量: 键名 HF_TOKEN 值: 从登录的HuggingFace网站获取 在账号设置中创建访问令牌")
     with gr.Tab("全自动数据集"):
-        try:
-            gr.load("AppleHarem/AppleBlock-1", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
-        except Exception as e:
-            logger.error("由于以下原因，全自动数据集未能加载: ", e)
+        with gr.Tab("1机"):
+            try:
+                gr.load("AppleHarem/AppleBlock-1", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
+            except Exception as e:
+                logger.warning("由于以下原因，全自动数据集-1机未能加载: ", e)
+        with gr.Tab("2机"):
+            try:
+                gr.load("AppleHarem/AppleBlock-2", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
+            except Exception as e:
+                logger.warning("由于以下原因，全自动数据集-2机未能加载: ", e)
+        with gr.Tab("3机"):
+            try:
+                gr.load("AppleHarem/AppleBlock-3", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
+            except Exception as e:
+                logger.warning("由于以下原因，全自动数据集-3机未能加载: ", e)
         with gr.Accordion("使用说明", open=False):
             gr.Markdown("《输入角色名然后你的数据集就出现在抱脸了》\n"
                         "需要输入抱脸token\n"
