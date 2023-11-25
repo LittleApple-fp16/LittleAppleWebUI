@@ -23,6 +23,8 @@ def run_train_plora(dataset_name, charname, min_step, bs, epoc, is_pipeline=Fals
         }
     if min_step:
         params['min_steps'] = int(min_step)
+    else:
+        params['no_min_steps'] = True
     train_plora(**params)
 
 
