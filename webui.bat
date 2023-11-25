@@ -1,6 +1,6 @@
 @echo off
 
-title=小苹果webui
+title=LittleAppleWebui
 SET VENV_NAME=venv
 
 if not exist %VENV_NAME% (

@@ -1,6 +1,6 @@
 @echo off
 
-title=强制更新
+title=Force update
 SET VENV_NAME=venv
 
 @rem Setting path...
