@@ -14,6 +14,7 @@ try:
     import argparse
     import webbrowser
     import asyncio
+    import torch.distributed as dist
     from pykakasi import kakasi
     from loguru import logger
     from pypinyin import lazy_pinyin
@@ -57,8 +58,6 @@ except ModuleNotFoundError:
     print("[致命错误] - 检测到模块丢失， 正在尝试安装依赖，请等待安装完成后再次打开")
     import subprocess
     subprocess.run(['dependencies.bat'], check=True)
-
-matplotlib.use('Agg')
 
 
 def download_images(source_type, character_name, p_min_size, p_background, p_class, p_rating, p_crop_person, p_ccip, p_auto_tagging, num_images, p_ai):
@@ -165,8 +164,9 @@ def download_illust(i_name, i_source, i_maxsize=None):
                 'http': 'http://' + cfg.get('proxie_ip', None) + ':' + cfg.get('proxie_host', None)
             }
         if 0 in i_source:
+            logger.info("[信息] - 画师内容获取需要一段时间")
             links = get_image_links(illust['user']['id'], maxsize)
-            for url, name in tzip(links[0], links[1], file=sys.stdout, ascii="░▒█", desc=" - 开始获取数据集"):
+            for url, name in tzip(links[0], links[1], file=sys.stdout, ascii="░▒█", desc=" - 开始下载"):
                 if not os.path.exists(f"dataset/{illust['user']['name']}"):
                     os.makedirs(f"dataset/{illust['user']['name']}")
                 download_link(url, f"dataset/{illust['user']['name']}/{name}.png")
@@ -811,10 +811,10 @@ def pipeline_start(ch_names):
         ch = ch.replace(' ', '_')
         ch_e = ''.join([r['hepburn']for r in riyu.convert(re.sub(r'[^\w\s()]', '', ''.join([word if not (u'\u4e00' <= word <= u'\u9fff') else lazy_pinyin(ch)[i] for i, word in enumerate(ch)])))]).replace(' ', '_')
         save_path = "pipeline\\dataset\\" + ch_e
-        # source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
-        # source_init.attach(*actions).export(
-        #     TextualInversionExporter(save_path)
-        # )
+        source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+        source_init.attach(*actions).export(
+            TextualInversionExporter(save_path)
+        )
         run_train_plora(ch_e, ch_e, None, 16, 10, is_pipeline=True)  # bs, epoch 32 25
 
         def huggingface(workdir: str, repository, revision, n_repeats, pretrained_model,
@@ -904,309 +904,315 @@ def pipeline_start(ch_names):
     return "所有任务完成"
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--host", type=str, default="127.0.0.1")
-parser.add_argument("--port", type=int, default=7862)
-parser.add_argument("--share", type=bool, default=False)
-args = parser.parse_args()
-
-# 读取配置文件
-global cfg
-load_settings()
-pixiv_login()
-output_cache = []
-# cfg = {}
-# 登录pixiv
-global pyapi
-# 登录huggingface
-# hf_login(token=os.environ.get('HF_TOKEN'))
-# 主界面
-with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
-    quicksettings = gr.Row(elem_id="quicksettings")
-    with quicksettings:
-        dataset_dropdown = gr.Dropdown(ref_datasets(True), label="当前数据集", value=ref_datasets(True)[0], container=True, show_label=True, interactive=True, elem_id='dataset_dropbar')
-        ref_datasets_button = gr.Button("🔄", elem_id='refresh_datasets')
-    with gr.Tab("数据获取"):
-        with gr.Tab("图站"):
-            source = gr.Radio(['Danbooru', 'Pixiv', 'Zerochan', '自动'], label='选择图站', value='Danbooru')
-            char_name = gr.Textbox(label='角色名称', value='', placeholder='填入角色名')
-            pre_min_size = gr.Textbox(label="最大尺寸", value="", placeholder="不填写将不生效", interactive=True)
-            pre_background = gr.ColorPicker(label="背景色", value="#FFFFFF", interactive=True)
-            pre_class = gr.CheckboxGroup(["素描", "3D"], label="风格过滤", value=None, type="index", interactive=True)
-            pre_rating = gr.CheckboxGroup(["健全", "r15", "r18"], label="评级筛选", value=["健全"], type="index", interactive=True)
-            pre_crop_person = gr.Checkbox(label="裁剪人物", value=False, interactive=True)
-            pre_ccip_option = gr.Checkbox(label="特征匹配", value=False, interactive=True)
-            pre_auto_tagging = gr.Checkbox(label="自动打标", value=False, interactive=True)
-            with gr.Column(visible=False) as pixiv_settings:
-                pixiv_no_ai = gr.Checkbox(label="非AI生成", interactive=True, value=False)
-            source.select(pixiv_setting_ctrl, None, [pixiv_settings])
-            dl_count = gr.Textbox(label="下载数量", value='100', placeholder="无上限")
-            # dl_count = gr.Slider(1, 1001, step=1, value=10, label="下载数量", elem_id='dl_count')
-            # save_path = gr.Textbox(label='保存路径', value='dataset', placeholder='自动创建子文件夹')
-            download_button = gr.Button("获取图片", variant="primary", interactive=True)
-            with gr.Accordion("使用说明", open=False):
-                gr.Markdown("对于单图站，填入要搜索的任何内容以获取对应标签图片\n"
-                            "对于自动图站源，必须填入一个角色名\n"
-                            "所有图站支持多内容顺序爬取，用半角逗号分隔，如\"铃兰,香风智乃\"\n"
-                            "保存的图片会以搜索内容自动生成一个数据集，获取完成后刷新数据集即可查看\n"
-                            "Pixiv源速度最慢、且质量最差")
-            pre_rating.change(pre_rating_limit, [pre_rating], [download_button])
-        with gr.Tab("画师"):
-            illu_name = gr.Textbox(label="画师名", placeholder="完整画师名")
-            with gr.Row():
-                # illu_get_pixiv = gr.Checkbox(label="Pixiv", value=True, interactive=True)
-                # illu_get_fanbox = gr.Checkbox(label="Fanbox", value=False, interactive=True)
-                illu_get_source = gr.CheckboxGroup(["Pixiv", "Fanbox"], label="获取渠道", value=["Pixiv"], type="index", interactive=True)
-                illu_max_size = gr.Textbox(label="最大文件大小", info="MB", placeholder="不填写则无限制", value="16")
-            illu_button = gr.Button("获取作品", variant="primary")
-            with gr.Accordion("使用说明", open=False):
-                gr.Markdown("仅支持pixiv fanbox 目前\n"
-                            "关于完整画师名：要写画师在pixiv对应的名字，不可以写fanbox上的英文名")
-            illu_get_source.change(illu_source_limit, [illu_get_source], [illu_button])
-            illu_getter_pic = gr.Image(type="filepath", label="到底是哪个画师?")
-            illu_getter_button = gr.Button("获取画师名", interactive=True)
-            # illu_id_tmp = gr.Textbox(visible=False)
-        # with gr.Tab("快速获取"):
-        #     fast_tag = gr.Textbox(label="Tag", placeholder="aaa,bbb|ccc,ddd", value='')
-        #     fast_button = gr.Button("开始获取", variant="primary", interactive=True)
-    with gr.Tab("数据增强"):
-        with gr.Accordion("三阶分割"):
-            stage_button = gr.Button("开始处理", variant="primary")
-        with gr.Accordion("差分过滤"):
-            cluster_threshold = gr.Slider(0, 1, label="阈值", step=0.1, value=0.45, interactive=True)
-            cluster_button = gr.Button("开始处理", variant="primary")
-            with gr.Accordion("使用说明", open=False):
-                gr.Markdown("差分检测：LPIPS（感知图像补丁相似性） ，全称为Learned Perceptual Image Patch "
-                            "Similarity，是一种用于评估图像相似性的度量方法。基于深度学习模型，通过比较图像之间的深度特征评估它们的相似性\n "
-                            "LPIPS使用了预训练的分类网络（如AlexNet或VGG）来提取图像的特征。然后计算两个图像特征之间的余弦距离，"
-                            "并对所有层和空间维度的距离进行平均，可以得到一个值，用于表示两个图像之间的感知差异。\n"
-                            "*会返回去除差分后的图片结果"
-                            "![cluster](file/markdown_res/lpips_full.plot.py.svg)")
-        with gr.Accordion("人物分离"):
-            seg_scale = gr.Slider(32, 2048,label="缩放大小", info="图像传递给模型时的缩放尺寸", step=32, value=1024, interactive=True)
-            with gr.Accordion("使用说明", open=False):
-                gr.Markdown("人物分离\n"
-                            "*会返回背景为透明的人物图片结果\n"
-                            "查阅skytnt的[复杂动漫抠像](https://github.com/SkyTNT/anime-segmentation/)")
-            seg_button = gr.Button("开始处理", variant="primary")
-        # with gr.Accordion("人物检测"):
-        #     ccip_level = gr.Checkbox(label="使用高精度", value=True, interactive=True)
-        #     ccip_model = gr.Dropdown(["v0", "v1", "v1.1"], label="模型选择", value="v1.1", interactive=True)
-        #     ccip_infer = gr.Slider(32, 2048, label="缩放大小", interactive=True, step=32, value=640, info="图像传递给模型时的缩放尺寸")
-        #     ccip_conf = gr.Slider(0.01, 1, label="检测阈值", interactive=True, value=0.25, step=0.01, info="置信度高于此值的检测结果会被返回")
-        #     ccip_iou = gr.Slider(0.01, 1, label="重叠阈值", interactive=True, value=0.7, step=0.01, info="重叠区域高于此阈值将会被丢弃")
-        #     ccip_button = gr.Button("开始检测", variant="primary")
-        #     with gr.Accordion("使用说明", open=False):
-        #         gr.Markdown("角色检测：CCIP（对比角色图像预训练）从动漫角色图像中提取特征，计算两个角色之间的视觉差异，并确定两个图像是否"
-        #                     "描绘相同的角色。![ccip](file/markdown_res/ccip_full.plot.py.svg)"
-        #                     "更多信息可查阅 [CCIP官方文档](https://deepghs.github.io/imgutils/main/api_doc/metrics/ccip.html).")
-        with gr.Accordion("面部检测"):
-            faced_level = gr.Checkbox(value=True, label="使用高精度", interactive=True)
-            faced_model = gr.Dropdown(["v0", "v1", "v1.3", "v1.4"], label="模型选择", value="v1.4", interactive=True)
-            faced_infer = gr.Slider(32,2048, label="缩放大小", interactive=True, step=32, value=640, info="图像传递给模型时的缩放尺寸")
-            faced_conf = gr.Slider(0.01, 1, label="检测阈值", interactive=True, value=0.25, step= 0.01, info="置信度高于此值的检测结果会被返回")
-            faced_iou = gr.Slider(0.01, 1, label="重叠阈值", interactive=True, value=0.7, step=0.01, info="重叠区域高于此阈值将会被丢弃")
-            with gr.Accordion("使用说明", open=False):
-                gr.Markdown("##面部检测"
-                            "来自imgutils检测模块"
-                            "###此功能会返回一个区域结果，而不是图片结果")
-            faced_button = gr.Button("开始检测", variant="primary")
-        with gr.Accordion("头部检测"):
-            headd_level = gr.Checkbox(value=True, label="使用高精度", interactive=True)
-            headd_infer = gr.Slider(32,2048, label="缩放大小", interactive=True, step=32, value=640, info="图像传递给模型时的缩放尺寸")
-            headd_conf = gr.Slider(0.01, 1, label="检测阈值", interactive=True, value=0.25, step=0.01, info="置信度高于此值的检测结果会被返回")
-            headd_iou = gr.Slider(0.01, 1, label="重叠阈值", interactive=True, value=0.7, step=0.01, info="重叠区域高于此阈值将会被丢弃")
-            with gr.Accordion("使用说明", open=False):
-                gr.Markdown("##头部检测"
-                            "来自imgutils检测模块"
-                            "###此功能会返回一个区域结果，而不是图片结果")
-            headd_button = gr.Button("开始检测", variant="primary")
-        with gr.Accordion("文本检测"):
-            with gr.Accordion("使用说明", open=False):
-                gr.Markdown("文本检测\n"
-                            "用ocr的方式检测文本的模块\n"
-                            "此功能会返回一个区域结果，而不是图片结果\n"
-                            "此功能结果质量差，不建议使用")
-            textd_button = gr.Button("开始检测", variant="primary")
-        with gr.Accordion("区域填充"):
-            areaf_isRandom = gr.Checkbox(label="随机颜色", value=True, interactive=True)
-            areaf_color = gr.ColorPicker(label="自定义颜色", value="#00FF00", visible=not areaf_isRandom.value)
-            areaf_button = gr.Button("开始处理", variant="primary")
-            with gr.Accordion("使用说明", open=False):
-                gr.Markdown("接收输出后的结果进行打码。\n"
-                            "运行结果内有区域信息，才可以填充...")
-            areaf_isRandom.select(color_picker_ctrl, None, [areaf_color])
-        with gr.Accordion("区域模糊"):
-            areab_radius = gr.Slider(1, 20, label="模糊强度", value=4, interactive=True, step=1)
-            areab_button = gr.Button("开始处理", variant="primary")
-            with gr.Accordion("使用说明", open=False):
-                gr.Markdown("接收输出后的结果进行打码。\n"
-                            "运行结果内有区域信息，才可以模糊...")
-        with gr.Accordion("区域剪裁"):
-            crop_hw_button = gr.Button("开始处理", variant="primary")
-            with gr.Accordion("使用说明", open=False):
-                gr.Markdown("将运行结果中的区域进行剪裁。\n"
-                            "运行结果内有区域信息，才可以剪裁...")
-        with gr.Accordion("自适应剪裁"):
-            crop_trans_button = gr.Button("开始处理", variant="primary")
-            crop_trans_thre = gr.Slider(0.01, 1, label="容差阈值", value=0.7, step=0.01)
-            crop_trans_filter = gr.Slider(0, 10, label="羽化", value=5, step=1)
-            with gr.Accordion("使用说明", open=False):
-                gr.Markdown("将数据集中的透明图片进行自适应剪裁。\n"
-                            "不对运行结果中的内容进行操作。")
-    with gr.Tab("打标器"):
-        taggers = ["wd14", "mldanbooru", "json解析"]
-        tagger_type = gr.Dropdown(taggers, value=taggers[0], label="打标器", allow_custom_value=False, interactive=True)
-        with gr.Column(visible=tagger_type.value == taggers[0]) as tagger_wd14_settings:
-            wd14_tagger_model = gr.Dropdown(["SwinV2", "ConvNext", "ConvNextV2", "ViT", "MOAT"], value="ConvNextV2", label="打标模型", interactive=True)
-            wd14_general_threshold = gr.Slider(0.01, 1, value=0.35, label="普通标签阈值", step=0.01, interactive=True)
-            wd14_character_threshold = gr.Slider(0.01, 1, value=0.85, label="角色标签阈值", step=0.01, interactive=True)
-            wd14_format_weight = gr.Checkbox(label="写入权重", value=False, interactive=True)
-            wd14_drop_overlap = gr.Checkbox(value=True, label="精确打标", interactive=True)
-            # wd14_use_blacklist = gr.Checkbox(label="使用黑名单", value=True, interactive=True)
-        with gr.Column(visible=tagger_type.value == taggers[1]) as tagger_mldanbooru_settings:
-            ml_use_real_name = gr.Checkbox(value=False, label="标签重定向", info="由于在Deepdanbooru训练后，Danbooru网站上的许多标签需要重命名和重定向，因此在某些应用场景中可能有必要使用最新的标签名称。")
-            ml_threshold = gr.Slider(0.01, 1, value=0.7, label="标签阈值", step=0.01, interactive=True)
-            ml_size = gr.Slider(32, 1024, value=448, step=32, label="缩放大小", interactive=True, info="将缩放后的图像传递给模型时的大小")
-            ml_keep_ratio = gr.Checkbox(value=False, label="保持比例", info="保持训练集图像的原始比例", interactive=True)
-            ml_format_weight = gr.Checkbox(label="写入权重", value=False, interactive=True)
-            ml_drop_overlap = gr.Checkbox(value=True, label="精确打标", interactive=True)
-            # ml_use_blacklist = gr.Checkbox(label="使用黑名单", value=True, interactive=True)
-        with gr.Column(visible=tagger_type.value == taggers[2]) as tagger_anal_settings:
-            with gr.Accordion("使用说明", open=False):
-                gr.Markdown("用此脚本获取的图片附有json文件\n"
-                            "使用此打标器以从中提取tag\n"
-                            "此功能不会检查图片，而是从所有可能的json文件中提取tag")
-            anal_del_json = gr.Checkbox(value=False, label="删除json", interactive=True)
-        use_blacklist = gr.Checkbox(label="使用黑名单", value=True, interactive=True)
-        with gr.Column(visible=use_blacklist.value) as tagger_dropper_settings:
-            drop_use_presets = gr.Checkbox(value=True, label="使用在线黑名单", info="获取在线黑名单，来自alea31435", interactive=True)
-            with gr.Column(visible=not drop_use_presets.value, elem_id="drop_custom_setting") as drop_custom_setting:
-                drop_custom_list = gr.Dropdown(ref_customList(True), value=ref_customList(True)[0], label="自定义黑名单", elem_id="custom_list", interactive=True, info="黑名单路径cfgs/blacklist/")
-                drop_ref_button = gr.Button("🔄", elem_id='refresh_custom_list')
-        op_exists_txt = gr.Dropdown(["复制文件", "忽略文件", "覆盖文件", "附加标签"], value="附加标签", info="对于已存在标签，打标器的行为", show_label=False, interactive=True)
-        tagger_button = gr.Button("打标", variant="primary")
-        # tagger_type.select(tagger_chooser_ctrl, None, [globals()[f'tagger_{("dropper" if tagger == "标签黑名单" else tagger)}_settings'] for tagger in taggers])
-        tagger_type.select(tagger_chooser_ctrl, None, [globals()[f'tagger_{("anal" if tagger == "json解析" else tagger)}_settings'] for tagger in taggers])
-        # wd14_use_blacklist.select(blacklist_settings_ctrl, None, [tagger_dropper_settings])
-        # ml_use_blacklist.select(blacklist_settings_ctrl, None, [tagger_dropper_settings])
-        use_blacklist.select(blacklist_settings_ctrl, None, [tagger_dropper_settings])
-        drop_use_presets.select(custom_blacklist_ctrl, None, [drop_custom_setting])
-    with gr.Tab("PLoRA训练"):
-        min_step = gr.Textbox(label="最小步数", value='', placeholder='不填写将自动计算')
-        epoch = gr.Slider(1, 100, label="Epoch", value=10)
-        batch_size = gr.Slider(1, 64, label="Batch Size", value=4, step=1)
-        train_button = gr.Button("开始训练", variant="primary")
-        with gr.Accordion("权重合并", open=True):
-            with gr.Column(elem_id="convert_lora_steps") as convert_lora_steps:
-                convert_step = gr.Dropdown(ref_runs(dataset_dropdown.value, True), value=ref_runs(dataset_dropdown.value, True)[0] if ref_runs(dataset_dropdown.value, True) else [], label="步数", info="合并对应步数的权重文件", elem_id="convert_list", multiselect=False, interactive=True)
-                convert_ref_button = gr.Button("🔄", elem_id='convert_ref_button')
-            convert_weights_button = gr.Button("开始合并", variant="primary")
-        with gr.Accordion("使用说明", open=False):
-            gr.Markdown("训练详细说明..什么的")
-    with gr.Tab("质量验证"):
-        with gr.Accordion("使用说明", open=False):
-            gr.Markdown("soon...")
-    with gr.Tab("上传权重"):
-        with gr.Accordion("使用说明", open=False):
-            gr.Markdown("soon...")
-    with gr.Tab("全自动训练"):
-        pipeline_text = gr.Textbox(label="输入角色名", placeholder="《输入角色名然后你的模型就出现在c站了》", info="要求角色名 用,分隔")
-        pipeline_button = gr.Button("开始全自动训练", variant="primary")
-        with gr.Accordion("使用说明", open=False):
-            gr.Markdown("《输入角色名然后你的模型就出现在c站了》\n"
-                        "需要在设置中设置c站token\n"
-                        "需要在计算机中添加环境变量: 键名 HF_TOKEN 值: 从登录的HuggingFace网站获取 在账号设置中创建访问令牌")
-    with gr.Tab("全自动数据集"):
-        with gr.Tab("1机"):
-            try:
-                gr.load("AppleHarem/AppleBlock-1", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
-            except Exception as e:
-                logger.warning("[警告] - 全自动数据集-1机未能加载: "+str(e))
-        with gr.Tab("2机"):
-            try:
-                gr.load("AppleHarem/AppleBlock-2", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
-            except Exception as e:
-                logger.warning("[警告] - 全自动数据集-2机未能加载: "+str(e))
-        with gr.Tab("3机"):
-            try:
-                gr.load("AppleHarem/AppleBlock-3", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
-            except Exception as e:
-                logger.warning("[警告] - 全自动数据集-3机未能加载: "+str(e))
-        with gr.Accordion("使用说明", open=False):
-            gr.Markdown("《输入角色名然后你的数据集就出现在抱脸了》\n"
-                        "需要输入抱脸token\n"
-                        "你必须拥有组织的访问权限才能查看此页面\n"
-                        "如果此页仍未加载，表示网络问题或机器已离线")
-    with gr.Tab("设置"):
-        with gr.Tab("Pixiv"):
-            pixiv_token = gr.Textbox(label="刷新令牌", placeholder="不填写将无法访问Pixiv", interactive=True, value=cfg.get('pixiv_token', ''))
-            pixiv_get_token = gr.Button("前往查询", interactive=True)
-            with gr.Accordion("令牌说明", open=False):
-                gr.Markdown("获取Pixiv图片需要刷新令牌\n"
-                            "用法：点击`前往获取`，将打开Pixiv网页，按F12启用开发者控制台，选择`网络/Network`，点击左侧第三个按钮`筛选器`，"
-                            "筛选`callback?`点击继续使用此账号登录，此时页面会跳转，开发者控制台会出现一条请求，点击它，进入`标头`"
-                            "复制`code=`后的内容，填入后台（黑窗口）按回车，后台将返回你的refresh token\n"
-                            "打开webui时会尝试自动登录，如果失败请尝试下方登录按钮，需要先填写刷新令牌并保存\n"
-                            "控制台中可以看到登录信息\n"
-                            "取消查询请在后台按ctrl+c")
-            # settings_list = [pixiv_token]
-            pixiv_manual_login = gr.Button("尝试登录", interactive=True)
-        with gr.Tab("Fanbox"):
-            fanbox_cookie = gr.Textbox(label="Cookie", lines=13, placeholder="不填写将无法获取Fanbox内容", interactive=True, value=cfg.get('fanbox_cookie', ''))
-            fanbox_get_cookie = gr.Button("前往查询", interactive=True)
-            with gr.Accordion("Cookie说明", open=False):
-                gr.Markdown("获取Fanbox图片需要Kemono网站Cookie\n"
-                            "Cookie格式：{xxx}，名为session的cookie\n"
-                            "具体操作：使用EditThisCookie浏览器扩展\n"
-                            "进入Kemono网站，导出cookie，将cookie粘贴到设置中，删除第一项和第三项，\n"
-                            "删除[]大括号，只保留名为session的cookie{xxx}即可")
-        with gr.Tab("Civitai"):
-            civitai_token = gr.Textbox(label="Cookie", placeholder="不填写无法自动上传c站", interactive=True, value=cfg.get('civitai_token', ''))
-        with gr.Tab("代理服务器"):
-            proxie_ip = gr.Textbox(label="代理IP地址", placeholder="代理软件的IP地址", value=cfg.get('proxie_ip', ''))
-            proxie_host = gr.Textbox(label="代理端口", placeholder="代理软件中的端口", value=cfg.get('proxie_host', ''))
-            proxie_enabled = gr.Checkbox(label="启用代理", interactive=True, value=cfg.get('proxie_enabled', False))
-        with gr.Tab("界面设置"):
-            theme_select = gr.Dropdown(['亮色', '黑色'], label="主题颜色", interactive=True, info="需要重启", value=cfg.get('theme', '亮色'))
-        setting_save_button = gr.Button("保存", interactive=True, variant="primary")
-        with gr.Accordion("使用说明", open=False):
-            gr.Markdown("我只是个打酱油的...")
-    with gr.Column(elem_id="output"):
-        message_output = gr.Textbox(label='运行结果', elem_id="message_output")
-        save_output = gr.Button("💾", elem_id="save_output", interactive=False)
-        message_output.change(save_output_ctrl, [], save_output)
-    # dl_count.change(None, )
-    pipeline_button.click(pipeline_start, [pipeline_text], [message_output])
-    setting_save_button.click(save_settings, [pixiv_token, fanbox_cookie, civitai_token, proxie_ip, proxie_host, proxie_enabled, theme_select], [message_output])
-    pixiv_manual_login.click(pixiv_login, [], [])
-    pixiv_get_token.click(get_ref_token, [], [])
-    fanbox_get_cookie.click(get_fanbox_cookie, [], [])
-    # fast_button.click(get_danbooru_fast, [fast_tag], [])
-    illu_getter_button.click(illu_getter, [illu_getter_pic], [message_output, illu_name])
-    download_button.click(download_images, [source, char_name, pre_min_size, pre_background, pre_class, pre_rating, pre_crop_person, pre_ccip_option, pre_auto_tagging, dl_count, pixiv_no_ai], [message_output], scroll_to_output=True)
-    ref_datasets_button.click(ref_datasets, [], [dataset_dropdown])
-    stage_button.click(three_stage, [dataset_dropdown], [message_output])
-    drop_ref_button.click(ref_customList, [], [drop_custom_list])
-    convert_ref_button.click(ref_runs, [dataset_dropdown], [convert_step])
-    convert_weights_button.click(convert_weights, [dataset_dropdown, convert_step], [message_output])
-    cluster_button.click(clustering, [dataset_dropdown, cluster_threshold], [message_output], scroll_to_output=True)
-    seg_button.click(img_segment, [dataset_dropdown, seg_scale], [message_output], scroll_to_output=True)
-    # ccip_button.click(person_detect, [dataset_dropdown, ccip_level, ccip_model, ccip_infer, ccip_conf, ccip_iou], [message_output])
-    faced_button.click(face_detect, [dataset_dropdown, faced_level, faced_model, faced_infer, faced_conf, faced_iou], [message_output], scroll_to_output=True)
-    headd_button.click(head_detect, [dataset_dropdown, headd_level, headd_infer, headd_conf, headd_iou], [message_output], scroll_to_output=True)
-    textd_button.click(text_detect, [dataset_dropdown], [message_output], scroll_to_output=True)
-    train_button.click(run_train_plora, [dataset_dropdown, dataset_dropdown, min_step, batch_size, epoch], [message_output], scroll_to_output=True)
-    areaf_button.click(area_fill, [dataset_dropdown, areaf_isRandom, areaf_color], [message_output], scroll_to_output=True)
-    areab_button.click(area_blur, [dataset_dropdown, areab_radius], [message_output], scroll_to_output=True)
-    crop_hw_button.click(crop_hw, [dataset_dropdown], [message_output], scroll_to_output=True)
-    crop_trans_button.click(crop_trans, [dataset_dropdown, crop_trans_thre, crop_trans_filter], [message_output], scroll_to_output=True)
-    tagger_button.click(tagging_main, [dataset_dropdown, tagger_type, wd14_tagger_model, wd14_general_threshold, wd14_character_threshold, wd14_format_weight, wd14_drop_overlap, ml_use_real_name, ml_threshold, ml_size, ml_format_weight, ml_keep_ratio, ml_drop_overlap, use_blacklist, drop_use_presets, drop_custom_list, op_exists_txt, anal_del_json], [message_output], scroll_to_output=True)
-    illu_button.click(download_illust, [illu_name, illu_get_source, illu_max_size], [message_output], scroll_to_output=True)
-    save_output.click(saving_output, [dataset_dropdown], [message_output])
-    iblock.title = "小苹果webui"
-
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", type=str, default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=7862)
+    parser.add_argument("--share", type=bool, default=False)
+    args = parser.parse_args()
+
+    # 读取配置文件
+    global cfg
+    matplotlib.use('Agg')
+    load_settings()
+    pixiv_login()
+    output_cache = []
+    # cfg = {}
+    # 登录pixiv
+    global pyapi
+    # 登录huggingface
+    # hf_login(token=os.environ.get('HF_TOKEN'))
+    # 主界面
+    with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
+        quicksettings = gr.Row(elem_id="quicksettings")
+        with quicksettings:
+            dataset_dropdown = gr.Dropdown(ref_datasets(True), label="当前数据集", value=ref_datasets(True)[0], container=True, show_label=True, interactive=True, elem_id='dataset_dropbar')
+            ref_datasets_button = gr.Button("🔄", elem_id='refresh_datasets')
+        with gr.Tab("数据获取"):
+            with gr.Tab("图站"):
+                source = gr.Radio(['Danbooru', 'Pixiv', 'Zerochan', '自动'], label='选择图站', value='Danbooru')
+                char_name = gr.Textbox(label='角色名称', value='', placeholder='填入角色名')
+                pre_min_size = gr.Textbox(label="最大尺寸", value="", placeholder="不填写将不生效", interactive=True)
+                pre_background = gr.ColorPicker(label="背景色", value="#FFFFFF", interactive=True)
+                pre_class = gr.CheckboxGroup(["素描", "3D"], label="风格过滤", value=None, type="index", interactive=True)
+                pre_rating = gr.CheckboxGroup(["健全", "r15", "r18"], label="评级筛选", value=["健全"], type="index", interactive=True)
+                pre_crop_person = gr.Checkbox(label="裁剪人物", value=False, interactive=True)
+                pre_ccip_option = gr.Checkbox(label="特征匹配", value=False, interactive=True)
+                pre_auto_tagging = gr.Checkbox(label="自动打标", value=False, interactive=True)
+                with gr.Column(visible=False) as pixiv_settings:
+                    pixiv_no_ai = gr.Checkbox(label="非AI生成", interactive=True, value=False)
+                source.select(pixiv_setting_ctrl, None, [pixiv_settings])
+                dl_count = gr.Textbox(label="下载数量", value='100', placeholder="无上限")
+                # dl_count = gr.Slider(1, 1001, step=1, value=10, label="下载数量", elem_id='dl_count')
+                # save_path = gr.Textbox(label='保存路径', value='dataset', placeholder='自动创建子文件夹')
+                download_button = gr.Button("获取图片", variant="primary", interactive=True)
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("对于单图站，填入要搜索的任何内容以获取对应标签图片\n"
+                                "对于自动图站源，必须填入一个角色名\n"
+                                "所有图站支持多内容顺序爬取，用半角逗号分隔，如\"铃兰,香风智乃\"\n"
+                                "保存的图片会以搜索内容自动生成一个数据集，获取完成后刷新数据集即可查看\n"
+                                "Pixiv源速度最慢、且质量最差")
+                pre_rating.change(pre_rating_limit, [pre_rating], [download_button])
+            with gr.Tab("画师"):
+                illu_name = gr.Textbox(label="画师名", placeholder="完整画师名")
+                with gr.Row():
+                    # illu_get_pixiv = gr.Checkbox(label="Pixiv", value=True, interactive=True)
+                    # illu_get_fanbox = gr.Checkbox(label="Fanbox", value=False, interactive=True)
+                    illu_get_source = gr.CheckboxGroup(["Pixiv", "Fanbox"], label="获取渠道", value=["Pixiv"], type="index", interactive=True)
+                    illu_max_size = gr.Textbox(label="最大文件大小", info="MB", placeholder="不填写则无限制", value="16")
+                illu_button = gr.Button("获取作品", variant="primary")
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("仅支持pixiv fanbox 目前\n"
+                                "关于完整画师名：要写画师在pixiv对应的名字，不可以写fanbox上的英文名")
+                illu_get_source.change(illu_source_limit, [illu_get_source], [illu_button])
+                illu_getter_pic = gr.Image(type="filepath", label="到底是哪个画师?")
+                illu_getter_button = gr.Button("获取画师名", interactive=True)
+                # illu_id_tmp = gr.Textbox(visible=False)
+            # with gr.Tab("快速获取"):
+            #     fast_tag = gr.Textbox(label="Tag", placeholder="aaa,bbb|ccc,ddd", value='')
+            #     fast_button = gr.Button("开始获取", variant="primary", interactive=True)
+        with gr.Tab("数据增强"):
+            with gr.Accordion("三阶分割"):
+                stage_button = gr.Button("开始处理", variant="primary")
+            with gr.Accordion("差分过滤"):
+                cluster_threshold = gr.Slider(0, 1, label="阈值", step=0.1, value=0.45, interactive=True)
+                cluster_button = gr.Button("开始处理", variant="primary")
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("差分检测：LPIPS（感知图像补丁相似性） ，全称为Learned Perceptual Image Patch "
+                                "Similarity，是一种用于评估图像相似性的度量方法。基于深度学习模型，通过比较图像之间的深度特征评估它们的相似性\n "
+                                "LPIPS使用了预训练的分类网络（如AlexNet或VGG）来提取图像的特征。然后计算两个图像特征之间的余弦距离，"
+                                "并对所有层和空间维度的距离进行平均，可以得到一个值，用于表示两个图像之间的感知差异。\n"
+                                "*会返回去除差分后的图片结果"
+                                "![cluster](file/markdown_res/lpips_full.plot.py.svg)")
+            with gr.Accordion("人物分离"):
+                seg_scale = gr.Slider(32, 2048, label="缩放大小", info="图像传递给模型时的缩放尺寸", step=32, value=1024, interactive=True)
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("人物分离\n"
+                                "*会返回背景为透明的人物图片结果\n"
+                                "查阅skytnt的[复杂动漫抠像](https://github.com/SkyTNT/anime-segmentation/)")
+                seg_button = gr.Button("开始处理", variant="primary")
+            # with gr.Accordion("人物检测"):
+            #     ccip_level = gr.Checkbox(label="使用高精度", value=True, interactive=True)
+            #     ccip_model = gr.Dropdown(["v0", "v1", "v1.1"], label="模型选择", value="v1.1", interactive=True)
+            #     ccip_infer = gr.Slider(32, 2048, label="缩放大小", interactive=True, step=32, value=640, info="图像传递给模型时的缩放尺寸")
+            #     ccip_conf = gr.Slider(0.01, 1, label="检测阈值", interactive=True, value=0.25, step=0.01, info="置信度高于此值的检测结果会被返回")
+            #     ccip_iou = gr.Slider(0.01, 1, label="重叠阈值", interactive=True, value=0.7, step=0.01, info="重叠区域高于此阈值将会被丢弃")
+            #     ccip_button = gr.Button("开始检测", variant="primary")
+            #     with gr.Accordion("使用说明", open=False):
+            #         gr.Markdown("角色检测：CCIP（对比角色图像预训练）从动漫角色图像中提取特征，计算两个角色之间的视觉差异，并确定两个图像是否"
+            #                     "描绘相同的角色。![ccip](file/markdown_res/ccip_full.plot.py.svg)"
+            #                     "更多信息可查阅 [CCIP官方文档](https://deepghs.github.io/imgutils/main/api_doc/metrics/ccip.html).")
+            with gr.Accordion("面部检测"):
+                faced_level = gr.Checkbox(value=True, label="使用高精度", interactive=True)
+                faced_model = gr.Dropdown(["v0", "v1", "v1.3", "v1.4"], label="模型选择", value="v1.4", interactive=True)
+                faced_infer = gr.Slider(32, 2048, label="缩放大小", interactive=True, step=32, value=640, info="图像传递给模型时的缩放尺寸")
+                faced_conf = gr.Slider(0.01, 1, label="检测阈值", interactive=True, value=0.25, step=0.01, info="置信度高于此值的检测结果会被返回")
+                faced_iou = gr.Slider(0.01, 1, label="重叠阈值", interactive=True, value=0.7, step=0.01, info="重叠区域高于此阈值将会被丢弃")
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("##面部检测"
+                                "来自imgutils检测模块"
+                                "###此功能会返回一个区域结果，而不是图片结果")
+                faced_button = gr.Button("开始检测", variant="primary")
+            with gr.Accordion("头部检测"):
+                headd_level = gr.Checkbox(value=True, label="使用高精度", interactive=True)
+                headd_infer = gr.Slider(32, 2048, label="缩放大小", interactive=True, step=32, value=640, info="图像传递给模型时的缩放尺寸")
+                headd_conf = gr.Slider(0.01, 1, label="检测阈值", interactive=True, value=0.25, step=0.01, info="置信度高于此值的检测结果会被返回")
+                headd_iou = gr.Slider(0.01, 1, label="重叠阈值", interactive=True, value=0.7, step=0.01, info="重叠区域高于此阈值将会被丢弃")
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("##头部检测"
+                                "来自imgutils检测模块"
+                                "###此功能会返回一个区域结果，而不是图片结果")
+                headd_button = gr.Button("开始检测", variant="primary")
+            with gr.Accordion("文本检测"):
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("文本检测\n"
+                                "用ocr的方式检测文本的模块\n"
+                                "此功能会返回一个区域结果，而不是图片结果\n"
+                                "此功能结果质量差，不建议使用")
+                textd_button = gr.Button("开始检测", variant="primary")
+            with gr.Accordion("区域填充"):
+                areaf_isRandom = gr.Checkbox(label="随机颜色", value=True, interactive=True)
+                areaf_color = gr.ColorPicker(label="自定义颜色", value="#00FF00", visible=not areaf_isRandom.value)
+                areaf_button = gr.Button("开始处理", variant="primary")
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("接收输出后的结果进行打码。\n"
+                                "运行结果内有区域信息，才可以填充...")
+                areaf_isRandom.select(color_picker_ctrl, None, [areaf_color])
+            with gr.Accordion("区域模糊"):
+                areab_radius = gr.Slider(1, 20, label="模糊强度", value=4, interactive=True, step=1)
+                areab_button = gr.Button("开始处理", variant="primary")
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("接收输出后的结果进行打码。\n"
+                                "运行结果内有区域信息，才可以模糊...")
+            with gr.Accordion("区域剪裁"):
+                crop_hw_button = gr.Button("开始处理", variant="primary")
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("将运行结果中的区域进行剪裁。\n"
+                                "运行结果内有区域信息，才可以剪裁...")
+            with gr.Accordion("自适应剪裁"):
+                crop_trans_button = gr.Button("开始处理", variant="primary")
+                crop_trans_thre = gr.Slider(0.01, 1, label="容差阈值", value=0.7, step=0.01)
+                crop_trans_filter = gr.Slider(0, 10, label="羽化", value=5, step=1)
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("将数据集中的透明图片进行自适应剪裁。\n"
+                                "不对运行结果中的内容进行操作。")
+        with gr.Tab("打标器"):
+            taggers = ["wd14", "mldanbooru", "json解析"]
+            tagger_type = gr.Dropdown(taggers, value=taggers[0], label="打标器", allow_custom_value=False, interactive=True)
+            with gr.Column(visible=tagger_type.value == taggers[0]) as tagger_wd14_settings:
+                wd14_tagger_model = gr.Dropdown(["SwinV2", "ConvNext", "ConvNextV2", "ViT", "MOAT"], value="ConvNextV2", label="打标模型", interactive=True)
+                wd14_general_threshold = gr.Slider(0.01, 1, value=0.35, label="普通标签阈值", step=0.01, interactive=True)
+                wd14_character_threshold = gr.Slider(0.01, 1, value=0.85, label="角色标签阈值", step=0.01, interactive=True)
+                wd14_format_weight = gr.Checkbox(label="写入权重", value=False, interactive=True)
+                wd14_drop_overlap = gr.Checkbox(value=True, label="精确打标", interactive=True)
+                # wd14_use_blacklist = gr.Checkbox(label="使用黑名单", value=True, interactive=True)
+            with gr.Column(visible=tagger_type.value == taggers[1]) as tagger_mldanbooru_settings:
+                ml_use_real_name = gr.Checkbox(value=False, label="标签重定向", info="由于在Deepdanbooru训练后，Danbooru网站上的许多标签需要重命名和重定向，因此在某些应用场景中可能有必要使用最新的标签名称。")
+                ml_threshold = gr.Slider(0.01, 1, value=0.7, label="标签阈值", step=0.01, interactive=True)
+                ml_size = gr.Slider(32, 1024, value=448, step=32, label="缩放大小", interactive=True, info="将缩放后的图像传递给模型时的大小")
+                ml_keep_ratio = gr.Checkbox(value=False, label="保持比例", info="保持训练集图像的原始比例", interactive=True)
+                ml_format_weight = gr.Checkbox(label="写入权重", value=False, interactive=True)
+                ml_drop_overlap = gr.Checkbox(value=True, label="精确打标", interactive=True)
+                # ml_use_blacklist = gr.Checkbox(label="使用黑名单", value=True, interactive=True)
+            with gr.Column(visible=tagger_type.value == taggers[2]) as tagger_anal_settings:
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("用此脚本获取的图片附有json文件\n"
+                                "使用此打标器以从中提取tag\n"
+                                "此功能不会检查图片，而是从所有可能的json文件中提取tag")
+                anal_del_json = gr.Checkbox(value=False, label="删除json", interactive=True)
+            use_blacklist = gr.Checkbox(label="使用黑名单", value=True, interactive=True)
+            with gr.Column(visible=use_blacklist.value) as tagger_dropper_settings:
+                drop_use_presets = gr.Checkbox(value=True, label="使用在线黑名单", info="获取在线黑名单，来自alea31435", interactive=True)
+                with gr.Column(visible=not drop_use_presets.value, elem_id="drop_custom_setting") as drop_custom_setting:
+                    drop_custom_list = gr.Dropdown(ref_customList(True), value=ref_customList(True)[0], label="自定义黑名单", elem_id="custom_list", interactive=True, info="黑名单路径cfgs/blacklist/")
+                    drop_ref_button = gr.Button("🔄", elem_id='refresh_custom_list')
+            op_exists_txt = gr.Dropdown(["复制文件", "忽略文件", "覆盖文件", "附加标签"], value="附加标签", info="对于已存在标签，打标器的行为", show_label=False, interactive=True)
+            tagger_button = gr.Button("打标", variant="primary")
+            # tagger_type.select(tagger_chooser_ctrl, None, [globals()[f'tagger_{("dropper" if tagger == "标签黑名单" else tagger)}_settings'] for tagger in taggers])
+            tagger_type.select(tagger_chooser_ctrl, None, [globals()[f'tagger_{("anal" if tagger == "json解析" else tagger)}_settings'] for tagger in taggers])
+            # wd14_use_blacklist.select(blacklist_settings_ctrl, None, [tagger_dropper_settings])
+            # ml_use_blacklist.select(blacklist_settings_ctrl, None, [tagger_dropper_settings])
+            use_blacklist.select(blacklist_settings_ctrl, None, [tagger_dropper_settings])
+            drop_use_presets.select(custom_blacklist_ctrl, None, [drop_custom_setting])
+        with gr.Tab("PLoRA训练"):
+            min_step = gr.Textbox(label="最小步数", value='', placeholder='不填写将自动计算')
+            epoch = gr.Slider(1, 100, label="Epoch", value=10)
+            batch_size = gr.Slider(1, 64, label="Batch Size", value=4, step=1)
+            train_button = gr.Button("开始训练", variant="primary")
+            with gr.Accordion("权重合并", open=True):
+                with gr.Column(elem_id="convert_lora_steps") as convert_lora_steps:
+                    convert_step = gr.Dropdown(ref_runs(dataset_dropdown.value, True), value=ref_runs(dataset_dropdown.value, True)[0] if ref_runs(dataset_dropdown.value, True) else [], label="步数",
+                                               info="合并对应步数的权重文件", elem_id="convert_list", multiselect=False, interactive=True)
+                    convert_ref_button = gr.Button("🔄", elem_id='convert_ref_button')
+                convert_weights_button = gr.Button("开始合并", variant="primary")
+            with gr.Accordion("使用说明", open=False):
+                gr.Markdown("训练详细说明..什么的")
+        with gr.Tab("质量验证"):
+            with gr.Accordion("使用说明", open=False):
+                gr.Markdown("soon...")
+        with gr.Tab("上传权重"):
+            with gr.Accordion("使用说明", open=False):
+                gr.Markdown("soon...")
+        with gr.Tab("全自动训练"):
+            pipeline_text = gr.Textbox(label="输入角色名", placeholder="《输入角色名然后你的模型就出现在c站了》", info="要求角色名 用,分隔")
+            pipeline_button = gr.Button("开始全自动训练", variant="primary")
+            with gr.Accordion("使用说明", open=False):
+                gr.Markdown("《输入角色名然后你的模型就出现在c站了》\n"
+                            "需要在设置中设置c站token\n"
+                            "需要在计算机中添加环境变量: 键名 HF_TOKEN 值: 从登录的HuggingFace网站获取 在账号设置中创建访问令牌")
+        # with gr.Tab("全自动数据集"):
+        #     with gr.Tab("1机"):
+        #         try:
+        #             gr.load("AppleHarem/AppleBlock-1", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
+        #         except Exception as e:
+        #             logger.warning("[警告] - 全自动数据集-1机未能加载: "+str(e))
+        #     with gr.Tab("2机"):
+        #         try:
+        #             gr.load("AppleHarem/AppleBlock-2", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
+        #         except Exception as e:
+        #             logger.warning("[警告] - 全自动数据集-2机未能加载: "+str(e))
+        #     with gr.Tab("3机"):
+        #         try:
+        #             gr.load("AppleHarem/AppleBlock-3", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
+        #         except Exception as e:
+        #             logger.warning("[警告] - 全自动数据集-3机未能加载: "+str(e))
+        #     with gr.Accordion("使用说明", open=False):
+        #         gr.Markdown("《输入角色名然后你的数据集就出现在抱脸了》\n"
+        #                     "需要输入抱脸token\n"
+        #                     "你必须拥有组织的访问权限才能查看此页面\n"
+        #                     "如果此页仍未加载，表示网络问题或机器已离线")
+        with gr.Tab("设置"):
+            with gr.Tab("Pixiv"):
+                pixiv_token = gr.Textbox(label="刷新令牌", placeholder="不填写将无法访问Pixiv", interactive=True, value=cfg.get('pixiv_token', ''))
+                pixiv_get_token = gr.Button("前往查询", interactive=True)
+                with gr.Accordion("令牌说明", open=False):
+                    gr.Markdown("获取Pixiv图片需要刷新令牌\n"
+                                "用法：点击`前往获取`，将打开Pixiv网页，按F12启用开发者控制台，选择`网络/Network`，点击左侧第三个按钮`筛选器`，"
+                                "筛选`callback?`点击继续使用此账号登录，此时页面会跳转，开发者控制台会出现一条请求，点击它，进入`标头`"
+                                "复制`code=`后的内容，填入后台（黑窗口）按回车，后台将返回你的refresh token\n"
+                                "打开webui时会尝试自动登录，如果失败请尝试下方登录按钮，需要先填写刷新令牌并保存\n"
+                                "控制台中可以看到登录信息\n"
+                                "取消查询请在后台按ctrl+c")
+                # settings_list = [pixiv_token]
+                pixiv_manual_login = gr.Button("尝试登录", interactive=True)
+            with gr.Tab("Fanbox"):
+                fanbox_cookie = gr.Textbox(label="Cookie", lines=13, placeholder="不填写将无法获取Fanbox内容", interactive=True, value=cfg.get('fanbox_cookie', ''))
+                fanbox_get_cookie = gr.Button("前往查询", interactive=True)
+                with gr.Accordion("Cookie说明", open=False):
+                    gr.Markdown("获取Fanbox图片需要Kemono网站Cookie\n"
+                                "Cookie格式：{xxx}，名为session的cookie\n"
+                                "具体操作：使用EditThisCookie浏览器扩展\n"
+                                "进入Kemono网站，导出cookie，将cookie粘贴到设置中，删除第一项和第三项，\n"
+                                "删除[]大括号，只保留名为session的cookie{xxx}即可")
+            with gr.Tab("Civitai"):
+                civitai_token = gr.Textbox(label="Cookie", placeholder="不填写无法自动上传c站", interactive=True, value=cfg.get('civitai_token', ''))
+            with gr.Tab("代理服务器"):
+                proxie_ip = gr.Textbox(label="代理IP地址", placeholder="代理软件的IP地址", value=cfg.get('proxie_ip', ''))
+                proxie_host = gr.Textbox(label="代理端口", placeholder="代理软件中的端口", value=cfg.get('proxie_host', ''))
+                proxie_enabled = gr.Checkbox(label="启用代理", interactive=True, value=cfg.get('proxie_enabled', False))
+            with gr.Tab("界面设置"):
+                theme_select = gr.Dropdown(['亮色', '黑色'], label="主题颜色", interactive=True, info="需要重启", value=cfg.get('theme', '亮色'))
+            setting_save_button = gr.Button("保存", interactive=True, variant="primary")
+            with gr.Accordion("使用说明", open=False):
+                gr.Markdown("我只是个打酱油的...")
+        with gr.Column(elem_id="output"):
+            message_output = gr.Textbox(label='运行结果', elem_id="message_output")
+            save_output = gr.Button("💾", elem_id="save_output", interactive=False)
+            message_output.change(save_output_ctrl, [], save_output)
+        # dl_count.change(None, )
+        pipeline_button.click(pipeline_start, [pipeline_text], [message_output])
+        setting_save_button.click(save_settings, [pixiv_token, fanbox_cookie, civitai_token, proxie_ip, proxie_host, proxie_enabled, theme_select], [message_output])
+        pixiv_manual_login.click(pixiv_login, [], [])
+        pixiv_get_token.click(get_ref_token, [], [])
+        fanbox_get_cookie.click(get_fanbox_cookie, [], [])
+        # fast_button.click(get_danbooru_fast, [fast_tag], [])
+        illu_getter_button.click(illu_getter, [illu_getter_pic], [message_output, illu_name])
+        download_button.click(download_images, [source, char_name, pre_min_size, pre_background, pre_class, pre_rating, pre_crop_person, pre_ccip_option, pre_auto_tagging, dl_count, pixiv_no_ai],
+                              [message_output], scroll_to_output=True)
+        ref_datasets_button.click(ref_datasets, [], [dataset_dropdown])
+        stage_button.click(three_stage, [dataset_dropdown], [message_output])
+        drop_ref_button.click(ref_customList, [], [drop_custom_list])
+        convert_ref_button.click(ref_runs, [dataset_dropdown], [convert_step])
+        convert_weights_button.click(convert_weights, [dataset_dropdown, convert_step], [message_output])
+        cluster_button.click(clustering, [dataset_dropdown, cluster_threshold], [message_output], scroll_to_output=True)
+        seg_button.click(img_segment, [dataset_dropdown, seg_scale], [message_output], scroll_to_output=True)
+        # ccip_button.click(person_detect, [dataset_dropdown, ccip_level, ccip_model, ccip_infer, ccip_conf, ccip_iou], [message_output])
+        faced_button.click(face_detect, [dataset_dropdown, faced_level, faced_model, faced_infer, faced_conf, faced_iou], [message_output], scroll_to_output=True)
+        headd_button.click(head_detect, [dataset_dropdown, headd_level, headd_infer, headd_conf, headd_iou], [message_output], scroll_to_output=True)
+        textd_button.click(text_detect, [dataset_dropdown], [message_output], scroll_to_output=True)
+        train_button.click(run_train_plora, [dataset_dropdown, dataset_dropdown, min_step, batch_size, epoch], [message_output], scroll_to_output=True)
+        areaf_button.click(area_fill, [dataset_dropdown, areaf_isRandom, areaf_color], [message_output], scroll_to_output=True)
+        areab_button.click(area_blur, [dataset_dropdown, areab_radius], [message_output], scroll_to_output=True)
+        crop_hw_button.click(crop_hw, [dataset_dropdown], [message_output], scroll_to_output=True)
+        crop_trans_button.click(crop_trans, [dataset_dropdown, crop_trans_thre, crop_trans_filter], [message_output], scroll_to_output=True)
+        tagger_button.click(tagging_main,
+                            [dataset_dropdown, tagger_type, wd14_tagger_model, wd14_general_threshold, wd14_character_threshold, wd14_format_weight, wd14_drop_overlap, ml_use_real_name, ml_threshold,
+                             ml_size, ml_format_weight, ml_keep_ratio, ml_drop_overlap, use_blacklist, drop_use_presets, drop_custom_list, op_exists_txt, anal_del_json], [message_output],
+                            scroll_to_output=True)
+        illu_button.click(download_illust, [illu_name, illu_get_source, illu_max_size], [message_output], scroll_to_output=True)
+        save_output.click(saving_output, [dataset_dropdown], [message_output])
+        iblock.title = "小苹果webui"
+
     # log.info(f"Server started at http://{args.host}:{args.port}")
     if sys.platform == "win32":
         webbrowser.open(f"http://127.0.0.1:{args.port}" + ("?__theme=dark" if cfg.get('theme', '亮色') == '黑色' else ""))
