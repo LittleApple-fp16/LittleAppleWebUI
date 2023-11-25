@@ -1,38 +1,40 @@
 @echo off
 
-title=Ğ¡Æ»¹ûwebui
+@rem ä¸ºä¸­æ–‡è·¯å¾„åˆ‡æ¢UNICODEæ¨¡å¼...
+@chcp 65001>nul
+title=å°è‹¹æœwebui
 SET VENV_NAME=venv
 
 if not exist %VENV_NAME% (
-set /p userinput=ÇëÊäÈëÒ»¸ö>=3.10.6°æ±¾µÄpythonÂ·¾¶£¬Èç¹ûµ±Ç°»·¾³±äÁ¿ÒÑ¾­Âú×ã£¬Ö±½Ó»Ø³µ:
+set /p userinput=è¯·è¾“å…¥ä¸€ä¸ª>=3.10.6ç‰ˆæœ¬çš„pythonè·¯å¾„ï¼Œå¦‚æœå½“å‰ç¯å¢ƒå˜é‡å·²ç»æ»¡è¶³ï¼Œç›´æ¥å›è½¦:
 if "%userinput%"=="" (
     set userinput=python
 )
 SET PYTHON=%userinput%
-    echo [³õÊ¼»¯] ÕıÔÚ´´½¨ĞéÄâ»·¾³...
-    echo [ĞÅÏ¢] ÒÀÀµÔ´ÍÆ¼öaliyun
+    echo [åˆå§‹åŒ–] æ­£åœ¨åˆ›å»ºè™šæ‹Ÿç¯å¢ƒ...
+    echo [ä¿¡æ¯] ä¾èµ–æºæ¨èaliyun
     %PYTHON% -m venv %VENV_NAME%
     call %VENV_NAME%\Scripts\activate.bat
-    @rem [³õÊ¼»¯] ÉèÖÃÒÀÀµÂ·¾¶µ½µ±Ç°Ä¿Â¼ÄÚ...
+    @rem [åˆå§‹åŒ–] è®¾ç½®ä¾èµ–è·¯å¾„åˆ°å½“å‰ç›®å½•å†…...
     set "path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%"
-    echo [³õÊ¼»¯] ÕıÔÚ°²×°ÒÀÀµ...
+    echo [åˆå§‹åŒ–] æ­£åœ¨å®‰è£…ä¾èµ–...
     python -m pip install --upgrade pip
     pip install -r requirements.txt
-    echo [ĞÅÏ¢] Íê³É£¬ÇëÔÙ´ÎÆô¶¯
+    echo [ä¿¡æ¯] å®Œæˆï¼Œè¯·å†æ¬¡å¯åŠ¨
     pause
 ) else (
-    echo [×Ô¼ì] ¼ì²âµ½ĞéÄâ»·¾³
+    echo [è‡ªæ£€] æ£€æµ‹åˆ°è™šæ‹Ÿç¯å¢ƒ
     SET PYTHON=python
 )
 
-@rem [×Ô¼ì] ÉèÖÃÒÀÀµÂ·¾¶µ½µ±Ç°Ä¿Â¼ÄÚ...
+@rem [è‡ªæ£€] è®¾ç½®ä¾èµ–è·¯å¾„åˆ°å½“å‰ç›®å½•å†…...
 set "path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%"
 
-echo [×Ô¼ì] ¼¤»îĞéÄâ»·¾³...
+echo [è‡ªæ£€] æ¿€æ´»è™šæ‹Ÿç¯å¢ƒ...
 call %VENV_NAME%\Scripts\activate.bat
-echo [×Ô¼ì] ×Ô¶¯¸üĞÂ...
+echo [è‡ªæ£€] è‡ªåŠ¨æ›´æ–°...
 git pull
-echo [×Ô¼ì] Æô¶¯webui...
+echo [è‡ªæ£€] å¯åŠ¨webui...
 %PYTHON% webui.py %*
 pause
 exit /b
