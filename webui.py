@@ -814,7 +814,7 @@ def pipeline_start(ch_names):
         source_init.attach(*actions).export(
             TextualInversionExporter(save_path)
         )
-        run_train_plora(ch_e, ch_e, min_step=None, bs=16, epoc=10, is_pipeline=True)  # bs, epoch 32 25
+        run_train_plora(ch_e, ch_e, min_step=2000, bs=10, epoc=10, is_pipeline=True)  # bs, epoch 32 25
 
         def huggingface(workdir: str, repository, revision, n_repeats, pretrained_model,
                         width, height, clip_skip, infer_steps):
