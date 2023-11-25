@@ -1,41 +1,43 @@
 @echo off
 
-title=Ğ¡Æ»¹ûwebui
+@rem ä¸ºä¸­æ–‡è·¯å¾„åˆ‡æ¢UNICODEæ¨¡å¼...
+@chcp 65001>nul
+title=å°è‹¹æœwebui
 SET VENV_NAME=venv
 
 if not exist %VENV_NAME% (
-set /p userinput=ÇëÊäÈëÒ»¸ö>=3.10.6°æ±¾µÄpythonÂ·¾¶£¬Èç¹ûµ±Ç°»·¾³±äÁ¿ÒÑ¾­Âú×ã£¬Ö±½Ó»Ø³µ:
+set /p userinput=è¯·è¾“å…¥ä¸€ä¸ª>=3.10.6ç‰ˆæœ¬çš„pythonè·¯å¾„ï¼Œå¦‚æœå½“å‰ç¯å¢ƒå˜é‡å·²ç»æ»¡è¶³ï¼Œç›´æ¥å›è½¦:
 if "%userinput%"=="" (
     set userinput=python
 )
 SET PYTHON=%userinput%
-    echo ÕıÔÚ´´½¨ĞéÄâ»·¾³...
-    echo ÒÀÀµÔ´ÍÆ¼öaliyun
+    echo æ­£åœ¨åˆ›å»ºè™šæ‹Ÿç¯å¢ƒ...
+    echo ä¾èµ–æºæ¨èaliyun
     %PYTHON% -m venv %VENV_NAME%
     call %VENV_NAME%\Scripts\activate.bat
-    @rem ÉèÖÃÒÀÀµÂ·¾¶µ½µ±Ç°Ä¿Â¼ÄÚ...
+    @rem è®¾ç½®ä¾èµ–è·¯å¾„åˆ°å½“å‰ç›®å½•å†…...
     set "path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%"
-    echo ÕıÔÚ°²×°ÒÀÀµ...
+    echo æ­£åœ¨å®‰è£…ä¾èµ–...
     python -m pip install --upgrade pip
     pip install -r requirements.txt
-    echo Íê³É£¬ÇëÊÖ¶¯°²×°pytorch£º
-    echo Çë´ò¿ªenvironment.batÔËĞĞtorchµÄ°²×°
-    echo torchµÄ°²×°ĞèÒªÁ¼ºÃÍøÂçÁ¬½Ó
-    echo °²×°ÃüÁî pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
+    echo å®Œæˆï¼Œè¯·æ‰‹åŠ¨å®‰è£…pytorchï¼š
+    echo è¯·æ‰“å¼€environment.batè¿è¡Œtorchçš„å®‰è£…
+    echo torchçš„å®‰è£…éœ€è¦è‰¯å¥½ç½‘ç»œè¿æ¥
+    echo å®‰è£…å‘½ä»¤ pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
     pause
 ) else (
-    echo ¼ì²âµ½ĞéÄâ»·¾³
+    echo æ£€æµ‹åˆ°è™šæ‹Ÿç¯å¢ƒ
     SET PYTHON=python
 )
 
-@rem ÉèÖÃÒÀÀµÂ·¾¶µ½µ±Ç°Ä¿Â¼ÄÚ...
+@rem è®¾ç½®ä¾èµ–è·¯å¾„åˆ°å½“å‰ç›®å½•å†…...
 set "path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%"
 
-echo ¼¤»îĞéÄâ»·¾³...
+echo æ¿€æ´»è™šæ‹Ÿç¯å¢ƒ...
 call %VENV_NAME%\Scripts\activate.bat
-echo ×Ô¶¯¸üĞÂ...
+echo è‡ªåŠ¨æ›´æ–°...
 git pull
-echo Æô¶¯webui...
+echo å¯åŠ¨webui...
 %PYTHON% webui.py --share %*
 pause
 exit /b

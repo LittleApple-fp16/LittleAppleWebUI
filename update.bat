@@ -1,5 +1,7 @@
 @echo off
 
+@rem 为中文路径切换UNICODE模式...
+@chcp 65001>nul
 title=强制更新
 SET VENV_NAME=venv
 

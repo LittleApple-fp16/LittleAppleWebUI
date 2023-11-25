@@ -1,8 +1,10 @@
-@rem ÉèÖÃÒÀÀµÂ·¾¶µ½µ±Ç°Ä¿Â¼ÄÚ...
+@rem ä¸ºä¸­æ–‡è·¯å¾„åˆ‡æ¢UNICODEæ¨¡å¼...
+@chcp 65001>nul
+@rem è®¾ç½®ä¾èµ–è·¯å¾„åˆ°å½“å‰ç›®å½•å†…...
 @SET VENV_NAME=venv
 @set "path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%"
 
-@title=»·¾³ÃüÁîĞĞ
+@title=ç¯å¢ƒå‘½ä»¤è¡Œ
 @if not defined PROMPT set PROMPT=$P$G
 @set PROMPT=(venv) %PROMPT%
 @cmd /k
