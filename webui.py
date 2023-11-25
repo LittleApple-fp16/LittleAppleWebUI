@@ -14,7 +14,6 @@ try:
     import argparse
     import webbrowser
     import asyncio
-    import torch.distributed as dist
     from pykakasi import kakasi
     from loguru import logger
     from pypinyin import lazy_pinyin
