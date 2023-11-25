@@ -1,6 +1,3 @@
-@rem 为中文路径切换UNICODE模式...
-@chcp 65001>nul
-@rem 设置依赖路径到当前目录内...
 @SET VENV_NAME=venv
 @set "path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%"
 

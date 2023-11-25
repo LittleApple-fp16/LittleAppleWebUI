@@ -1,40 +1,37 @@
 @echo off
 
-@rem 为中文路径切换UNICODE模式...
-@chcp 65001>nul
 title=小苹果webui
 SET VENV_NAME=venv
 
 if not exist %VENV_NAME% (
-set /p userinput=请输入一个>=3.10.6版本的python路径，如果当前环境变量已经满足，直接回车:
+set /p userinput=Please enter a Python path for version>=3.10.6. If the current environment variable is already satisfied, press Enter directly:
 if "%userinput%"=="" (
     set userinput=python
 )
 SET PYTHON=%userinput%
-    echo [初始化] 正在创建虚拟环境...
-    echo [信息] 依赖源推荐aliyun
+    echo [init] Creating venv...
     %PYTHON% -m venv %VENV_NAME%
     call %VENV_NAME%\Scripts\activate.bat
-    @rem [初始化] 设置依赖路径到当前目录内...
+    @rem [init] Setting path...
     set "path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%"
-    echo [初始化] 正在安装依赖...
+    echo [init] Installing deps...
     python -m pip install --upgrade pip
     pip install -r requirements.txt
-    echo [信息] 完成，请再次启动
+    echo [info] Done. Please restart.
     pause
 ) else (
-    echo [自检] 检测到虚拟环境
+    echo [info] Detected venv
     SET PYTHON=python
 )
 
-@rem [自检] 设置依赖路径到当前目录内...
+@rem [info] Setting path...
 set "path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%"
 
-echo [自检] 激活虚拟环境...
+echo [info] Activating...
 call %VENV_NAME%\Scripts\activate.bat
-echo [自检] 自动更新...
+echo [info] Auto update...
 git pull
-echo [自检] 启动webui...
+echo [info] Starting webui...
 %PYTHON% webui.py %*
 pause
 exit /b
