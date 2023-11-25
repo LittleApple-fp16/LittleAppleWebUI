@@ -1,19 +1,21 @@
+import io
+import logging
+import sys
+import time
+import os
+import re
+import random
+import json
+import glob
+import argparse
+from typing import Literal, cast
 try:
-    import io
-    import logging
-    import sys
-    import time
     import matplotlib
-    import os
-    import re
     import gradio as gr
-    import random
-    import json
-    import glob
     import numpy
-    import argparse
     import webbrowser
     import asyncio
+    from gradio_client import Client
     from pykakasi import kakasi
     from loguru import logger
     from pypinyin import lazy_pinyin
@@ -24,13 +26,12 @@ try:
     from littleapple.kemono_dl.main import downloader as kemono_dl
     from littleapple.kemono_dl.args import get_args as kemono_args
     from littleapple.train import run_train_plora
-    from typing import Literal, cast
     from pixivpy3 import AppPixivAPI, PixivError
     from tqdm import tqdm
     from tqdm.contrib import tzip
     from waifuc.action import HeadCountAction, AlignMinSizeAction, CCIPAction, ThreeStageSplitAction, ModeConvertAction, ClassFilterAction, PersonSplitAction, TaggingAction, RatingFilterAction, NoMonochromeAction, RandomFilenameAction, FirstNSelectAction, FilterSimilarAction, FileExtAction
     from waifuc.export import SaveExporter, TextualInversionExporter
-    from waifuc.source import DanbooruSource, PixivSearchSource, ZerochanSource, LocalSource, GcharAutoSource
+    from waifuc.source import GelbooruSource, PixivSearchSource, ZerochanSource, LocalSource, GcharAutoSource
 
     from ditk import logging
     from hbutils.system import TemporaryDirectory
@@ -56,7 +57,12 @@ try:
 except ModuleNotFoundError:
     print("[致命错误] - 检测到模块丢失， 正在尝试安装依赖，请等待安装完成后再次打开")
     import subprocess
-    subprocess.run(['dependencies.bat'], check=True)
+    if os.name == 'nt':
+        subprocess.run(['dependencies.bat'], check=True)
+    elif os.name == 'posix':
+        subprocess.run(['dependencies.sh'], check=True)
+    else:
+        print("[错误] - 未知的操作系统")
 
 
 def download_images(source_type, character_name, p_min_size, p_background, p_class, p_rating, p_crop_person, p_ccip, p_auto_tagging, num_images, p_ai):
@@ -71,8 +77,8 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
     for character in character_list:
         character = character.replace(' ', '_')  # 将空格替换为下划线
         save_path = 'dataset/' + character
-        if source_type == 'Danbooru':
-            source_init = DanbooruSource([character, 'solo'])
+        if source_type == 'Gelbooru':
+            source_init = GelbooruSource([character, 'solo'])
         elif source_type == 'Pixiv':
             if not cfg.get('pixiv_token', ''):
                 gr.Warning("Pixiv未登录")
@@ -113,7 +119,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
         if ratings_to_filter != set(rating_map.values()):
             actions.append(RatingFilterAction(ratings=cast(list[Literal['safe', 'r15', 'r18']], list(ratings_to_filter))))
         actions.append(FirstNSelectAction(int(num_images)))
-        if source_type == 'Danbooru' and not p_auto_tagging:
+        if source_type == 'Gelbooru' and not p_auto_tagging:
             source_init.attach(*actions).export(  # 只下载前num_images张图片
                 SaveExporter(save_path)  # 将图片保存到指定路径
             )
@@ -185,7 +191,7 @@ def get_fanbox_cookie():
     webbrowser.open(f"https://kemono.su/account/login")
 
 
-global danbooru_fast_settings
+global gelbooru_fast_settings
 
 
 # def get_danbooru_fast(tags):
@@ -810,10 +816,10 @@ def pipeline_start(ch_names):
         ch = ch.replace(' ', '_')
         ch_e = ''.join([r['hepburn']for r in riyu.convert(re.sub(r'[^\w\s()]', '', ''.join([word if not (u'\u4e00' <= word <= u'\u9fff') else lazy_pinyin(ch)[i] for i, word in enumerate(ch)])))]).replace(' ', '_')
         save_path = "pipeline\\dataset\\" + ch_e
-        source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
-        source_init.attach(*actions).export(
-            TextualInversionExporter(save_path)
-        )
+        # source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+        # source_init.attach(*actions).export(
+        #     TextualInversionExporter(save_path)
+        # )
         run_train_plora(ch_e, ch_e, min_step=2000, bs=10, epoc=10, is_pipeline=True)  # bs, epoch 32 25
 
         def huggingface(workdir: str, repository, revision, n_repeats, pretrained_model,
@@ -903,6 +909,33 @@ def pipeline_start(ch_names):
     return "所有任务完成"
 
 
+def get_hf_token():
+    return os.environ.get('HF_TOKEN')
+
+
+def auto_crawler(chars_list, number):
+    global crawler_clients
+    crawler_clients["client_" + str(number)] = Client(f"AppleHarem/AppleBlock-{number}", hf_token=get_hf_token()).submit(get_hf_token(), chars_list, True, api_name="/start_func", result_callbacks=[auto_crawler_done])
+    gr.Info("["+str(number)+"机] 全自动训练集任务已提交")
+
+
+def auto_crawler_status(number):
+    global crawler_clients
+    if 'crawler_clients' in globals():
+        client = crawler_clients.get("client_" + str(number))
+        if client is not None:
+            gr.Info(client.status())
+        else:
+            gr.Warning(str(number) + "机未初始化")
+    else:
+        gr.Warning("未初始化任何训练机")
+
+
+def auto_crawler_done(msg):
+    logger.success(msg)
+    gr.Info(msg)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="127.0.0.1")
@@ -910,15 +943,16 @@ if __name__ == "__main__":
     parser.add_argument("--share", type=bool, default=False)
     args = parser.parse_args()
 
+    matplotlib.use('Agg')
     # 读取配置文件
     global cfg
-    matplotlib.use('Agg')
     load_settings()
-    pixiv_login()
     output_cache = []
     # cfg = {}
     # 登录pixiv
     global pyapi
+    pixiv_login()
+    crawler_clients = {}
     # 登录huggingface
     # hf_login(token=os.environ.get('HF_TOKEN'))
     # 主界面
@@ -929,7 +963,7 @@ if __name__ == "__main__":
             ref_datasets_button = gr.Button("🔄", elem_id='refresh_datasets')
         with gr.Tab("数据获取"):
             with gr.Tab("图站"):
-                source = gr.Radio(['Danbooru', 'Pixiv', 'Zerochan', '自动'], label='选择图站', value='Danbooru')
+                source = gr.Radio(['Gelbooru', 'Pixiv', 'Zerochan', '自动'], label='选择图站', value='Gelbooru')
                 char_name = gr.Textbox(label='角色名称', value='', placeholder='填入角色名')
                 pre_min_size = gr.Textbox(label="最大尺寸", value="", placeholder="不填写将不生效", interactive=True)
                 pre_background = gr.ColorPicker(label="背景色", value="#FFFFFF", interactive=True)
@@ -1113,33 +1147,32 @@ if __name__ == "__main__":
             with gr.Accordion("使用说明", open=False):
                 gr.Markdown("soon...")
         with gr.Tab("全自动训练"):
-            pipeline_text = gr.Textbox(label="输入角色名", placeholder="《输入角色名然后你的模型就出现在c站了》", info="要求角色名 用,分隔")
+            pipeline_text = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的模型就出现在c站了》", info="要求角色名 用,分隔")
             pipeline_button = gr.Button("开始全自动训练", variant="primary")
             with gr.Accordion("使用说明", open=False):
                 gr.Markdown("《输入角色名然后你的模型就出现在c站了》\n"
                             "需要在设置中设置c站token\n"
                             "需要在计算机中添加环境变量: 键名 HF_TOKEN 值: 从登录的HuggingFace网站获取 在账号设置中创建访问令牌")
-        # with gr.Tab("全自动数据集"):
-        #     with gr.Tab("1机"):
-        #         try:
-        #             gr.load("AppleHarem/AppleBlock-1", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
-        #         except Exception as e:
-        #             logger.warning("[警告] - 全自动数据集-1机未能加载: "+str(e))
-        #     with gr.Tab("2机"):
-        #         try:
-        #             gr.load("AppleHarem/AppleBlock-2", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
-        #         except Exception as e:
-        #             logger.warning("[警告] - 全自动数据集-2机未能加载: "+str(e))
-        #     with gr.Tab("3机"):
-        #         try:
-        #             gr.load("AppleHarem/AppleBlock-3", src="spaces", hf_token=os.environ.get('HF_TOKEN'))
-        #         except Exception as e:
-        #             logger.warning("[警告] - 全自动数据集-3机未能加载: "+str(e))
-        #     with gr.Accordion("使用说明", open=False):
-        #         gr.Markdown("《输入角色名然后你的数据集就出现在抱脸了》\n"
-        #                     "需要输入抱脸token\n"
-        #                     "你必须拥有组织的访问权限才能查看此页面\n"
-        #                     "如果此页仍未加载，表示网络问题或机器已离线")
+        with gr.Tab("全自动数据集"):
+            with gr.Tab("1机"):
+                auto_crawl_1_chars = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的数据集就出现在抱脸了》", info="要求角色名 用,分隔")
+                auto_crawl_1_button = gr.Button("开始全自动数据集", variant="primary")
+                auto_crawl_1_status = gr.Button("查询状态")
+                auto_crawl_1_number = gr.Textbox(value="1", visible=False)
+            with gr.Tab("2机"):
+                auto_crawl_2_chars = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的数据集就出现在抱脸了》", info="要求角色名 用,分隔")
+                auto_crawl_2_button = gr.Button("开始全自动数据集", variant="primary")
+                auto_crawl_2_status = gr.Button("查询状态")
+                auto_crawl_2_number = gr.Textbox(value="2", visible=False)
+            with gr.Tab("3机"):
+                auto_crawl_3_chars = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的数据集就出现在抱脸了》", info="要求角色名 用,分隔")
+                auto_crawl_3_button = gr.Button("开始全自动数据集", variant="primary")
+                auto_crawl_3_status = gr.Button("查询状态")
+                auto_crawl_3_number = gr.Textbox(value="3", visible=False)
+            with gr.Accordion("使用说明", open=False):
+                gr.Markdown("《输入角色名然后你的数据集就出现在抱脸了》\n"
+                            "需要设置抱脸token\n"
+                            "你必须拥有组织的读写权限")
         with gr.Tab("设置"):
             with gr.Tab("Pixiv"):
                 pixiv_token = gr.Textbox(label="刷新令牌", placeholder="不填写将无法访问Pixiv", interactive=True, value=cfg.get('pixiv_token', ''))
@@ -1165,6 +1198,10 @@ if __name__ == "__main__":
                                 "删除[]大括号，只保留名为session的cookie{xxx}即可")
             with gr.Tab("Civitai"):
                 civitai_token = gr.Textbox(label="Cookie", placeholder="不填写无法自动上传c站", interactive=True, value=cfg.get('civitai_token', ''))
+            with gr.Tab("Huggingface"):
+                hf_tips = gr.Markdown("Huggingface的token需要在环境变量中设置")
+                hf_token_show = gr.Markdown(get_hf_token())
+                hf_token_ref = gr.Button("刷新token")
             with gr.Tab("代理服务器"):
                 proxie_ip = gr.Textbox(label="代理IP地址", placeholder="代理软件的IP地址", value=cfg.get('proxie_ip', ''))
                 proxie_host = gr.Textbox(label="代理端口", placeholder="代理软件中的端口", value=cfg.get('proxie_host', ''))
@@ -1179,6 +1216,12 @@ if __name__ == "__main__":
             save_output = gr.Button("💾", elem_id="save_output", interactive=False)
             message_output.change(save_output_ctrl, [], save_output)
         # dl_count.change(None, )
+        auto_crawl_1_button.click(auto_crawler, [auto_crawl_1_chars, auto_crawl_1_number], [])
+        auto_crawl_2_button.click(auto_crawler, [auto_crawl_2_chars, auto_crawl_2_number], [])
+        auto_crawl_3_button.click(auto_crawler, [auto_crawl_3_chars, auto_crawl_3_number], [])
+        auto_crawl_1_status.click(auto_crawler_status, [auto_crawl_1_number], [])
+        auto_crawl_2_status.click(auto_crawler_status, [auto_crawl_2_number], [])
+        auto_crawl_3_status.click(auto_crawler_status, [auto_crawl_3_number], [])
         pipeline_button.click(pipeline_start, [pipeline_text], [message_output])
         setting_save_button.click(save_settings, [pixiv_token, fanbox_cookie, civitai_token, proxie_ip, proxie_host, proxie_enabled, theme_select], [message_output])
         pixiv_manual_login.click(pixiv_login, [], [])

@@ -44,7 +44,8 @@ def deploy_to_huggingface(workdir: str, repository=None, revision: str = 'main',
                 )
             ]
 
-            current_time = datetime.datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')
+            tokyo_tz = pytz.timezone('Asia/Tokyo')
+            current_time = datetime.datetime.now().astimezone(tokyo_tz).strftime('%Y-%m-%d %H:%M:%S %Z')
             commit_message = f'Update {name}\'s .gitattributes, on {current_time}'
             logging.info(f'Updating {name}\'s .gitattributes to repository {repository!r} ...')
             hf_client.create_commit(
