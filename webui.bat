@@ -2,13 +2,9 @@
 
 title=LittleAppleWebui
 SET VENV_NAME=venv
+SET PYTHON=python
 
 if not exist %VENV_NAME% (
-set /p userinput=Please enter a Python path for version>=3.10.6. If the current environment variable is already satisfied, press Enter directly:
-if "%userinput%"=="" (
-    set userinput=python
-)
-SET PYTHON=%userinput%
     echo [init] Creating venv...
     %PYTHON% -m venv %VENV_NAME%
     call %VENV_NAME%\Scripts\activate.bat
@@ -21,7 +17,6 @@ SET PYTHON=%userinput%
     pause
 ) else (
     echo [info] Detected venv
-    SET PYTHON=python
 )
 
 @rem [info] Setting path...
