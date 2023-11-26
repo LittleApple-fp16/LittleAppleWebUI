@@ -915,7 +915,10 @@ def get_hf_token():
 
 def auto_crawler(chars_list, number):
     global crawler_clients
-    crawler_clients["client_" + str(number)] = Client(f"AppleHarem/AppleBlock-{number}", hf_token=get_hf_token()).submit(get_hf_token(), chars_list, True, api_name="/start_func", result_callbacks=[auto_crawler_done])
+    crawler_clients["client_" + str(number)] = Client(f"AppleHarem/AppleBlock-{number}", hf_token=get_hf_token())
+    logger.info(f"[信息] - 创建{number}机")
+    crawler_clients["client_" + str(number)] = crawler_clients["client_" + str(number)].submit(get_hf_token(), chars_list, True, api_name="/crawlup")
+    logger.info(f"[信息] - 提交{number}机训练集任务")
     gr.Info("["+str(number)+"机] 全自动训练集任务已提交")
 
 
@@ -924,11 +927,13 @@ def auto_crawler_status(number):
     if 'crawler_clients' in globals():
         client = crawler_clients.get("client_" + str(number))
         if client is not None:
-            gr.Info(client.status())
+            gr.Info(str(client.status()))
+            logger.debug(str(client.status()))
+            logger.debug(str(client.result()))
         else:
             gr.Warning(str(number) + "机未初始化")
     else:
-        gr.Warning("未初始化任何训练机")
+        gr.Warning("未初始化任何远端")
 
 
 def auto_crawler_done(msg):
