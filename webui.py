@@ -473,7 +473,7 @@ def ref_datasets(need_list=False):
         return list_datasets
     else:
         gr.Info("数据集已更新")
-        return gr.Dropdown.update(choices=list_datasets)
+        return gr.update(choices=list_datasets)
 
 
 def ref_customList(need_list=False):
@@ -487,7 +487,7 @@ def ref_customList(need_list=False):
         return custom_blacklist
     else:
         gr.Info("标签黑名单已更新")
-        return gr.Dropdown.update(choices=custom_blacklist)
+        return gr.update(choices=custom_blacklist)
 
 
 def ref_runs(dataset_name, need_list=False):
@@ -503,7 +503,7 @@ def ref_runs(dataset_name, need_list=False):
         if need_list:
             return []
         else:
-            return gr.Dropdown.update(choices=[])
+            return gr.update(choices=[])
     if runs_list is not None:
         runs_list = sorted(runs_list, key=int, reverse=True)
         if need_list:
@@ -511,7 +511,7 @@ def ref_runs(dataset_name, need_list=False):
         else:
             gr.Info("训练结果已更新")
             # print("结果"+str(runs_list))
-            return gr.Dropdown.update(choices=runs_list)
+            return gr.update(choices=runs_list)
 
 
 def convert_weights(dataset_name, step):
