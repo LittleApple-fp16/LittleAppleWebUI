@@ -472,7 +472,7 @@ def ref_datasets(need_list=False):
         for each_dataset in datasets:
             # f_dataset = each_dataset.__next__()
             if not each_dataset.name.startswith('.') and each_dataset.is_dir():
-                if each_dataset.name == 'kohya':
+                if each_dataset.name == '_kohya':
                     with os.scandir(each_dataset) as kohya_datasets:
                         for kohya_dataset in kohya_datasets:
                             if not kohya_dataset.name.startswith('.') and kohya_dataset.is_dir():
@@ -531,7 +531,7 @@ def run_train_lora(dataset_name, epoch, bs, toml_index):
         raise DatasetTypeError(dataset_name, "正在尝试加载kohya数据集")
     else:
         r_dataset_name = dataset_name.replace(" (kohya)", "")
-        kohya_train_lora("dataset/kohya/"+r_dataset_name, r_dataset_name, "runs/kohya/"+r_dataset_name, epoch, bs, toml_index)
+        kohya_train_lora("dataset/_kohya/"+r_dataset_name, r_dataset_name, "runs/kohya/"+r_dataset_name, epoch, bs, toml_index)
     return "LoRA训练完成"
 
 
