@@ -26,6 +26,7 @@ try:
     from littleapple.kemono_dl.main import downloader as kemono_dl
     from littleapple.kemono_dl.args import get_args as kemono_args
     from littleapple.train import run_train_plora
+    from littleapple.exceptions import DatasetTypeError
     from pixivpy3 import AppPixivAPI, PixivError
     from tqdm import tqdm
     from tqdm.contrib import tzip
@@ -134,8 +135,10 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
     return "已获取数据集"
 
 
-def dataset_getImg(dataset_name):  # 请确保每个方法中只调用一次 由于tqdm
+def dataset_getImg(dataset_name):  # 确保每个方法中只调用一次 由于tqdm
     global output_cache
+    if dataset_name.endswith(' (kohya)'):
+        raise DatasetTypeError(dataset_name=dataset_name, message="正在尝试加载hcp数据集")
     logger.info(" - 加载数据集图像...")
     dataset_path = "dataset/" + dataset_name
     images = []
@@ -469,7 +472,13 @@ def ref_datasets(need_list=False):
         for each_dataset in datasets:
             # f_dataset = each_dataset.__next__()
             if not each_dataset.name.startswith('.') and each_dataset.is_dir():
-                list_datasets.append(each_dataset.name)
+                if each_dataset.name == 'kohya':
+                    with os.scandir(each_dataset) as kohya_datasets:
+                        for kohya_dataset in kohya_datasets:
+                            if not kohya_dataset.name.startswith('.') and kohya_dataset.is_dir():
+                                list_datasets.append(kohya_dataset.name + ' (kohya)')
+                else:
+                    list_datasets.append(each_dataset.name)
     if need_list:
         return list_datasets
     else:
@@ -515,10 +524,14 @@ def ref_runs(dataset_name, need_list=False):
             return gr.update(choices=runs_list)
 
 
-def run_train_lora(dataset_name, epoch, bs):
+def run_train_lora(dataset_name, epoch, bs, toml_index):
     logger.info("LoRA开始训练")
-    gr.Info(f"[{dataset_name}]"+"LoRA开始训练")
-    kohya_train_lora("dataset/"+dataset_name, dataset_name, "runs/kohya/"+dataset_name, epoch, bs)
+    gr.Info(f"[{dataset_name}] "+"LoRA开始训练")
+    if not dataset_name.endswith(' (kohya)'):
+        raise DatasetTypeError(dataset_name, "正在尝试加载kohya数据集")
+    else:
+        r_dataset_name = dataset_name.replace(" (kohya)", "")
+        kohya_train_lora("dataset/kohya/"+r_dataset_name, r_dataset_name, "runs/kohya/"+r_dataset_name, epoch, bs, toml_index)
     return "LoRA训练完成"
 
 
@@ -1150,6 +1163,7 @@ if __name__ == "__main__":
         with gr.Tab("LoRA训练"):
             lora_epoch = gr.Slider(1, 100, label="Epoch", value=10)
             lora_batch_size = gr.Slider(1, 64, label="Batch Size", value=1, step=1)
+            lora_toml_presets = gr.Radio(['默认', '一杯哈萨姆'], label="参数", info="通用化的参数预设", type="index", value="默认", interactive=True)
             lora_train_button = gr.Button("开始训练", variant="primary")
         with gr.Tab("质量验证"):
             with gr.Accordion("使用说明", open=False):
@@ -1259,7 +1273,7 @@ if __name__ == "__main__":
         headd_button.click(head_detect, [dataset_dropdown, headd_level, headd_infer, headd_conf, headd_iou], [message_output], scroll_to_output=True)
         textd_button.click(text_detect, [dataset_dropdown], [message_output], scroll_to_output=True)
         plora_train_button.click(run_train_plora, [dataset_dropdown, plora_min_step, plora_batch_size, plora_epoch], [message_output], scroll_to_output=True)
-        lora_train_button.click(run_train_lora, [dataset_dropdown, lora_epoch, lora_batch_size], [message_output], scroll_to_output=True)
+        lora_train_button.click(run_train_lora, [dataset_dropdown, lora_epoch, lora_batch_size, lora_toml_presets], [message_output], scroll_to_output=True)
         areaf_button.click(area_fill, [dataset_dropdown, areaf_isRandom, areaf_color], [message_output], scroll_to_output=True)
         areab_button.click(area_blur, [dataset_dropdown, areab_radius], [message_output], scroll_to_output=True)
         crop_hw_button.click(crop_hw, [dataset_dropdown], [message_output], scroll_to_output=True)

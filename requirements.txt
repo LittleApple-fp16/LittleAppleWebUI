@@ -208,3 +208,4 @@ voluptuous==0.13.1
 # open clip for SDXL
 open-clip-torch==2.20.0
 toml==0.10.2
+prodigyopt
