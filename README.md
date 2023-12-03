@@ -10,6 +10,7 @@ I didn't know that there was already webui support for plora training, so I trie
 <br><br>
 If you are interested in full-auto pipeline, it's recommended to follow the [DeepGHS team](https://github.com/deepghs), 
 there are something interesting there :)
+
 ## Installation
 * Python 3.10.6
 * Dependencies will be installed on first start.
@@ -20,6 +21,12 @@ git clone https://github.com/LittleApple-fp16/LittleAppleWebUI.git
 ```
 ## Usage
 start webui.bat
+
+## Preview
+![waifuc](https://github.com/LittleApple-fp16/LittleAppleWebUI/blob/master/markdown_res/preview1.svg)
+![imgutils](https://github.com/LittleApple-fp16/LittleAppleWebUI/blob/master/markdown_res/preview2.svg)
+![tagger](https://github.com/LittleApple-fp16/LittleAppleWebUI/blob/master/markdown_res/preview3.svg)
+![settings](https://github.com/LittleApple-fp16/LittleAppleWebUI/blob/master/markdown_res/preview4.svg)
 
 ## Other
 * I don't understand Python, and I can't guarantee too much functionality for this. However, if there are any issues with UI usage, you can let me know.

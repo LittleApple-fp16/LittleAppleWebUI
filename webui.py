@@ -44,6 +44,7 @@ try:
     from huggingface_hub import hf_hub_url
     from huggingface_hub._login import login as hf_login
     from cyberharem.infer.draw import _DEFAULT_INFER_MODEL
+    from kohya.train_network import kohya_train_lora
 
     from PIL import Image
     from imgutils.data import load_image, load_images, rgb_encode, rgb_decode
@@ -54,8 +55,8 @@ try:
     from imgutils.segment import segment_rgba_with_isnetis
     from imgutils.ocr import detect_text_with_ocr
     from cyberharem.publish.convert import convert_to_webui_lora
-except ModuleNotFoundError:
-    print("[致命错误] - 检测到模块丢失， 正在尝试安装依赖，请等待安装完成后再次打开")
+except ModuleNotFoundError as e:
+    print(f"[致命错误] - 检测到模块丢失: {e}， 正在尝试安装依赖，请等待安装完成后再次打开")
     import subprocess
     if os.name == 'nt':
         subprocess.run(['dependencies.bat'], check=True)
@@ -493,7 +494,7 @@ def ref_customList(need_list=False):
 def ref_runs(dataset_name, need_list=False):
     runs_list = []
     try:
-        with os.scandir(f"runs/{dataset_name}/ckpts") as conv_list:
+        with os.scandir(f"runs/hcpdiff/{dataset_name}/ckpts") as conv_list:
             for conv in conv_list:
                 # print("遍历了一个conv")
                 if conv.is_file():
@@ -512,6 +513,13 @@ def ref_runs(dataset_name, need_list=False):
             gr.Info("训练结果已更新")
             # print("结果"+str(runs_list))
             return gr.update(choices=runs_list)
+
+
+def run_train_lora(dataset_name, epoch, bs):
+    logger.info("LoRA开始训练")
+    gr.Info(f"[{dataset_name}]"+"LoRA开始训练")
+    kohya_train_lora("dataset/"+dataset_name, dataset_name, "runs/kohya/"+dataset_name, epoch, bs)
+    return "LoRA训练完成"
 
 
 def convert_weights(dataset_name, step):
@@ -812,15 +820,15 @@ def pipeline_start(ch_names):
                FirstNSelectAction(1000)]  # 700+
     ch_list = ch_names.split(',')
     for ch in ch_list:
-        gr.Info("["+ch+"]"+" 全自动训练开始")
+        gr.Info(f"[{ch}]"+" 全自动训练开始")
         ch = ch.replace(' ', '_')
         ch_e = ''.join([r['hepburn']for r in riyu.convert(re.sub(r'[^\w\s()]', '', ''.join([word if not (u'\u4e00' <= word <= u'\u9fff') else lazy_pinyin(ch)[i] for i, word in enumerate(ch)])))]).replace(' ', '_')
         save_path = "pipeline\\dataset\\" + ch_e
-        # source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
-        # source_init.attach(*actions).export(
-        #     TextualInversionExporter(save_path)
-        # )
-        run_train_plora(ch_e, ch_e, min_step=2000, bs=10, epoc=10, is_pipeline=True)  # bs, epoch 32 25
+        source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+        source_init.attach(*actions).export(
+            TextualInversionExporter(save_path)
+        )
+        run_train_plora(ch_e, bs=4, epoc=10, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
 
         def huggingface(workdir: str, repository, revision, n_repeats, pretrained_model,
                         width, height, clip_skip, infer_steps):
@@ -903,7 +911,7 @@ def pipeline_start(ch_names):
             civitai(repository=ch_e, draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=cfg.get('civitai_token', ''), epochs=None, publish_time=None, steps=None, title=None, version_name=None)
         except Exception as e:
             logger.error(" - 错误:", e)
-        gr.Info("["+ch+"]" + " 全自动训练完成")
+        gr.Info(f"[{ch}]" + " 全自动训练完成")
         logger.success("已完成"+ch+"角色上传")
     gr.Info("所有全自动训练任务完成")
     return "所有任务完成"
@@ -1021,7 +1029,7 @@ if __name__ == "__main__":
                                 "LPIPS使用了预训练的分类网络（如AlexNet或VGG）来提取图像的特征。然后计算两个图像特征之间的余弦距离，"
                                 "并对所有层和空间维度的距离进行平均，可以得到一个值，用于表示两个图像之间的感知差异。\n"
                                 "*会返回去除差分后的图片结果"
-                                "![cluster](file/markdown_res/lpips_full.plot.py.svg)")
+                                "![cluster](markdown_res/lpips_full.plot.py.svg)")
             with gr.Accordion("人物分离"):
                 seg_scale = gr.Slider(32, 2048, label="缩放大小", info="图像传递给模型时的缩放尺寸", step=32, value=1024, interactive=True)
                 with gr.Accordion("使用说明", open=False):
@@ -1038,7 +1046,7 @@ if __name__ == "__main__":
             #     ccip_button = gr.Button("开始检测", variant="primary")
             #     with gr.Accordion("使用说明", open=False):
             #         gr.Markdown("角色检测：CCIP（对比角色图像预训练）从动漫角色图像中提取特征，计算两个角色之间的视觉差异，并确定两个图像是否"
-            #                     "描绘相同的角色。![ccip](file/markdown_res/ccip_full.plot.py.svg)"
+            #                     "描绘相同的角色。![ccip](markdown_res/ccip_full.plot.py.svg)"
             #                     "更多信息可查阅 [CCIP官方文档](https://deepghs.github.io/imgutils/main/api_doc/metrics/ccip.html).")
             with gr.Accordion("面部检测"):
                 faced_level = gr.Checkbox(value=True, label="使用高精度", interactive=True)
@@ -1133,10 +1141,20 @@ if __name__ == "__main__":
             use_blacklist.select(blacklist_settings_ctrl, None, [tagger_dropper_settings])
             drop_use_presets.select(custom_blacklist_ctrl, None, [drop_custom_setting])
         with gr.Tab("PLoRA训练"):
-            min_step = gr.Textbox(label="最小步数", value='', placeholder='不填写将自动计算')
-            epoch = gr.Slider(1, 100, label="Epoch", value=10)
-            batch_size = gr.Slider(1, 64, label="Batch Size", value=4, step=1)
-            train_button = gr.Button("开始训练", variant="primary")
+            plora_min_step = gr.Textbox(label="最小步数", value='', placeholder='不填写将自动计算')
+            plora_epoch = gr.Slider(1, 100, label="Epoch", value=10)
+            plora_batch_size = gr.Slider(1, 64, label="Batch Size", value=4, step=1)
+            plora_train_button = gr.Button("开始训练", variant="primary")
+            with gr.Accordion("使用说明", open=False):
+                gr.Markdown("训练详细说明..什么的")
+        with gr.Tab("LoRA训练"):
+            lora_epoch = gr.Slider(1, 100, label="Epoch", value=10)
+            lora_batch_size = gr.Slider(1, 64, label="Batch Size", value=1, step=1)
+            lora_train_button = gr.Button("开始训练", variant="primary")
+        with gr.Tab("质量验证"):
+            with gr.Accordion("使用说明", open=False):
+                gr.Markdown("soon...")
+        with gr.Tab("上传权重"):
             with gr.Accordion("权重合并", open=True):
                 with gr.Column(elem_id="convert_lora_steps") as convert_lora_steps:
                     convert_step = gr.Dropdown(ref_runs(dataset_dropdown.value, True), value=ref_runs(dataset_dropdown.value, True)[0] if ref_runs(dataset_dropdown.value, True) else [], label="步数",
@@ -1144,13 +1162,7 @@ if __name__ == "__main__":
                     convert_ref_button = gr.Button("🔄", elem_id='convert_ref_button')
                 convert_weights_button = gr.Button("开始合并", variant="primary")
             with gr.Accordion("使用说明", open=False):
-                gr.Markdown("训练详细说明..什么的")
-        with gr.Tab("质量验证"):
-            with gr.Accordion("使用说明", open=False):
-                gr.Markdown("soon...")
-        with gr.Tab("上传权重"):
-            with gr.Accordion("使用说明", open=False):
-                gr.Markdown("soon...")
+                gr.Markdown("上传权重到抱脸和C站 soon..")
         with gr.Tab("全自动训练"):
             pipeline_text = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的模型就出现在c站了》", info="要求角色名 用,分隔")
             pipeline_button = gr.Button("开始全自动训练", variant="primary")
@@ -1204,8 +1216,7 @@ if __name__ == "__main__":
             with gr.Tab("Civitai"):
                 civitai_token = gr.Textbox(label="Cookie", placeholder="不填写无法自动上传c站", interactive=True, value=cfg.get('civitai_token', ''))
             with gr.Tab("Huggingface"):
-                hf_tips = gr.Markdown("Huggingface的token需要在环境变量中设置")
-                hf_token_show = gr.Markdown(get_hf_token())
+                hf_token_show = gr.Textbox(label="Token", value=get_hf_token(), info="Huggingface的token需要在环境变量中设置", interactive=False)
                 hf_token_ref = gr.Button("刷新token")
             with gr.Tab("代理服务器"):
                 proxie_ip = gr.Textbox(label="代理IP地址", placeholder="代理软件的IP地址", value=cfg.get('proxie_ip', ''))
@@ -1247,7 +1258,8 @@ if __name__ == "__main__":
         faced_button.click(face_detect, [dataset_dropdown, faced_level, faced_model, faced_infer, faced_conf, faced_iou], [message_output], scroll_to_output=True)
         headd_button.click(head_detect, [dataset_dropdown, headd_level, headd_infer, headd_conf, headd_iou], [message_output], scroll_to_output=True)
         textd_button.click(text_detect, [dataset_dropdown], [message_output], scroll_to_output=True)
-        train_button.click(run_train_plora, [dataset_dropdown, dataset_dropdown, min_step, batch_size, epoch], [message_output], scroll_to_output=True)
+        plora_train_button.click(run_train_plora, [dataset_dropdown, plora_min_step, plora_batch_size, plora_epoch], [message_output], scroll_to_output=True)
+        lora_train_button.click(run_train_lora, [dataset_dropdown, lora_epoch, lora_batch_size], [message_output], scroll_to_output=True)
         areaf_button.click(area_fill, [dataset_dropdown, areaf_isRandom, areaf_color], [message_output], scroll_to_output=True)
         areab_button.click(area_blur, [dataset_dropdown, areab_radius], [message_output], scroll_to_output=True)
         crop_hw_button.click(crop_hw, [dataset_dropdown], [message_output], scroll_to_output=True)

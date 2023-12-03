@@ -133,7 +133,7 @@ pyreadline3==3.4.1
 python-dateutil==2.8.2
 python-multipart==0.0.6
 pytimeparse==1.1.8
-pytorch-lightning==1.5.10
+pytorch-lightning==1.9.0
 pytz==2023.3.post1
 PyYAML
 rapidfuzz==3.4.0
@@ -201,3 +201,10 @@ pykakasi==2.2.1
 torch==2.0.1 --find-links https://download.pytorch.org/whl/cu118
 torchvision==0.15.2 --find-links https://download.pytorch.org/whl/cu118
 torchaudio==2.0.2 --find-links https://download.pytorch.org/whl/cu118
+# sd-scripts
+ftfy==6.1.1
+easygui==0.98.3
+voluptuous==0.13.1
+# open clip for SDXL
+open-clip-torch==2.20.0
+toml==0.10.2
