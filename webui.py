@@ -1163,7 +1163,7 @@ if __name__ == "__main__":
         with gr.Tab("LoRA训练"):
             lora_epoch = gr.Slider(1, 100, label="Epoch", value=10)
             lora_batch_size = gr.Slider(1, 64, label="Batch Size", value=1, step=1)
-            lora_toml_presets = gr.Radio(['默认', '一杯哈萨姆'], label="参数", info="通用化的参数预设", type="index", value="默认", interactive=True)
+            lora_toml_presets = gr.Radio(['默认', '一杯哈萨姆', '琥珀青葉'], label="参数", info="通用化的参数预设", type="index", value="默认", interactive=True)
             lora_train_button = gr.Button("开始训练", variant="primary")
         with gr.Tab("质量验证"):
             with gr.Accordion("使用说明", open=False):
