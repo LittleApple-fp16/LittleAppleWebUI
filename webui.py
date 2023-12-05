@@ -15,6 +15,10 @@ try:
     import numpy
     import webbrowser
     import asyncio
+    import tkinter as tk
+    from tkinter import filedialog
+    import cv2
+    import shutil
     from gradio_client import Client
     from pykakasi import kakasi
     from loguru import logger
@@ -962,6 +966,44 @@ def auto_crawler_done(msg):
     gr.Info(msg)
 
 
+def mirror_process():
+    img_count = 0
+    tag_count = 0
+    gr.Info("选择包含图像的文件夹")
+    root = tk.Tk()
+    root.withdraw()
+    pths = []
+    while True:
+        pth = filedialog.askdirectory()
+        if pth:
+            pths.append(os.path.abspath(pth))
+        else:
+            break
+    gr.Info("快速镜像开始处理")
+    for i_pth in pths:
+        output_folder = i_pth + '_mirror'
+        os.makedirs(output_folder, exist_ok=False)
+        for filename in tqdm(os.listdir(i_pth), file=sys.stdout, desc=" - 快速镜像开始处理", ascii="░▒█"):
+            if filename.endswith(".jpg") or filename.endswith(".png") or filename.endswith(".jpeg"):
+                img_path = os.path.join(i_pth, filename)
+                txt_file = os.path.splitext(img_path)[0] + ".txt"
+                json_file = os.path.splitext(img_path)[0] + ".json"
+                img = cv2.imread(img_path)
+                img_mirror = cv2.flip(img, 1)
+                cv2.imwrite(os.path.join(output_folder, filename), img_mirror)
+                img_count = img_count + 1
+                # tag
+                if os.path.isfile(txt_file):
+                    shutil.copy(txt_file, os.path.join(output_folder, os.path.basename(txt_file)))
+                    tag_count = tag_count + 1
+                if os.path.isfile(json_file):
+                    shutil.copy(json_file, os.path.join(output_folder, os.path.basename(json_file)))
+                    tag_count = tag_count + 1
+    logger.success("快速镜像处理完成，输出位置与源文件夹位置相同")
+    gr.Info("快速镜像处理完成")
+    return "处理完毕, 共处理" + str(img_count) + "张图片, " + str(tag_count) + "个tag文件"
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="127.0.0.1")
@@ -1025,96 +1067,116 @@ if __name__ == "__main__":
                                 "关于完整画师名：要写画师在pixiv对应的名字，不可以写fanbox上的英文名")
                 illu_get_source.change(illu_source_limit, [illu_get_source], [illu_button])
                 illu_getter_pic = gr.Image(type="filepath", label="到底是哪个画师?")
-                illu_getter_button = gr.Button("获取画师名", interactive=True)
+                # illu_getter_button = gr.Button("获取画师名", interactive=True)
                 # illu_id_tmp = gr.Textbox(visible=False)
             # with gr.Tab("快速获取"):
             #     fast_tag = gr.Textbox(label="Tag", placeholder="aaa,bbb|ccc,ddd", value='')
             #     fast_button = gr.Button("开始获取", variant="primary", interactive=True)
         with gr.Tab("数据增强"):
-            with gr.Accordion("三阶分割"):
-                stage_button = gr.Button("开始处理", variant="primary")
-            with gr.Accordion("差分过滤"):
-                cluster_threshold = gr.Slider(0, 1, label="阈值", step=0.1, value=0.45, interactive=True)
-                cluster_button = gr.Button("开始处理", variant="primary")
+            with gr.Tab("快速操作"):
+                with gr.Accordion("三阶分割"):
+                    stage_button = gr.Button("开始处理", variant="primary")
+                with gr.Accordion("自适应剪裁"):
+                    crop_trans_button = gr.Button("开始处理", variant="primary")
+                    crop_trans_thre = gr.Slider(0.01, 1, label="容差阈值", value=0.7, step=0.01)
+                    crop_trans_filter = gr.Slider(0, 10, label="羽化", value=5, step=1)
+                    with gr.Accordion("使用说明", open=False):
+                        gr.Markdown("将数据集中的透明图片进行自适应剪裁。\n"
+                                    "不对运行结果中的内容进行操作。")
+                with gr.Accordion("差分过滤"):
+                    cluster_threshold = gr.Slider(0, 1, label="阈值", step=0.1, value=0.45, interactive=True)
+                    cluster_button = gr.Button("开始处理", variant="primary")
+                    with gr.Accordion("使用说明", open=False):
+                        gr.Markdown("差分检测：LPIPS（感知图像补丁相似性） ，全称为Learned Perceptual Image Patch "
+                                    "Similarity，是一种用于评估图像相似性的度量方法。基于深度学习模型，通过比较图像之间的深度特征评估它们的相似性\n "
+                                    "LPIPS使用了预训练的分类网络（如AlexNet或VGG）来提取图像的特征。然后计算两个图像特征之间的余弦距离，"
+                                    "并对所有层和空间维度的距离进行平均，可以得到一个值，用于表示两个图像之间的感知差异。\n"
+                                    "*会暂存去除差分后的图片结果"
+                                    "![cluster](markdown_res/lpips_full.plot.py.svg)")
+                with gr.Accordion("人物分离"):
+                    seg_scale = gr.Slider(32, 2048, label="缩放大小", info="图像传递给模型时的缩放尺寸", step=32, value=1024, interactive=True)
+                    with gr.Accordion("使用说明", open=False):
+                        gr.Markdown("人物分离\n"
+                                    "*会暂存背景为透明的人物图片结果\n"
+                                    "查阅skytnt的[复杂动漫抠像](https://github.com/SkyTNT/anime-segmentation/)")
+                    seg_button = gr.Button("开始处理", variant="primary")
                 with gr.Accordion("使用说明", open=False):
-                    gr.Markdown("差分检测：LPIPS（感知图像补丁相似性） ，全称为Learned Perceptual Image Patch "
-                                "Similarity，是一种用于评估图像相似性的度量方法。基于深度学习模型，通过比较图像之间的深度特征评估它们的相似性\n "
-                                "LPIPS使用了预训练的分类网络（如AlexNet或VGG）来提取图像的特征。然后计算两个图像特征之间的余弦距离，"
-                                "并对所有层和空间维度的距离进行平均，可以得到一个值，用于表示两个图像之间的感知差异。\n"
-                                "*会返回去除差分后的图片结果"
-                                "![cluster](markdown_res/lpips_full.plot.py.svg)")
-            with gr.Accordion("人物分离"):
-                seg_scale = gr.Slider(32, 2048, label="缩放大小", info="图像传递给模型时的缩放尺寸", step=32, value=1024, interactive=True)
-                with gr.Accordion("使用说明", open=False):
-                    gr.Markdown("人物分离\n"
-                                "*会返回背景为透明的人物图片结果\n"
-                                "查阅skytnt的[复杂动漫抠像](https://github.com/SkyTNT/anime-segmentation/)")
-                seg_button = gr.Button("开始处理", variant="primary")
-            # with gr.Accordion("人物检测"):
-            #     ccip_level = gr.Checkbox(label="使用高精度", value=True, interactive=True)
-            #     ccip_model = gr.Dropdown(["v0", "v1", "v1.1"], label="模型选择", value="v1.1", interactive=True)
-            #     ccip_infer = gr.Slider(32, 2048, label="缩放大小", interactive=True, step=32, value=640, info="图像传递给模型时的缩放尺寸")
-            #     ccip_conf = gr.Slider(0.01, 1, label="检测阈值", interactive=True, value=0.25, step=0.01, info="置信度高于此值的检测结果会被返回")
-            #     ccip_iou = gr.Slider(0.01, 1, label="重叠阈值", interactive=True, value=0.7, step=0.01, info="重叠区域高于此阈值将会被丢弃")
-            #     ccip_button = gr.Button("开始检测", variant="primary")
-            #     with gr.Accordion("使用说明", open=False):
-            #         gr.Markdown("角色检测：CCIP（对比角色图像预训练）从动漫角色图像中提取特征，计算两个角色之间的视觉差异，并确定两个图像是否"
-            #                     "描绘相同的角色。![ccip](markdown_res/ccip_full.plot.py.svg)"
-            #                     "更多信息可查阅 [CCIP官方文档](https://deepghs.github.io/imgutils/main/api_doc/metrics/ccip.html).")
-            with gr.Accordion("面部检测"):
-                faced_level = gr.Checkbox(value=True, label="使用高精度", interactive=True)
-                faced_model = gr.Dropdown(["v0", "v1", "v1.3", "v1.4"], label="模型选择", value="v1.4", interactive=True)
-                faced_infer = gr.Slider(32, 2048, label="缩放大小", interactive=True, step=32, value=640, info="图像传递给模型时的缩放尺寸")
-                faced_conf = gr.Slider(0.01, 1, label="检测阈值", interactive=True, value=0.25, step=0.01, info="置信度高于此值的检测结果会被返回")
-                faced_iou = gr.Slider(0.01, 1, label="重叠阈值", interactive=True, value=0.7, step=0.01, info="重叠区域高于此阈值将会被丢弃")
-                with gr.Accordion("使用说明", open=False):
-                    gr.Markdown("##面部检测"
-                                "来自imgutils检测模块"
-                                "###此功能会返回一个区域结果，而不是图片结果")
-                faced_button = gr.Button("开始检测", variant="primary")
-            with gr.Accordion("头部检测"):
-                headd_level = gr.Checkbox(value=True, label="使用高精度", interactive=True)
-                headd_infer = gr.Slider(32, 2048, label="缩放大小", interactive=True, step=32, value=640, info="图像传递给模型时的缩放尺寸")
-                headd_conf = gr.Slider(0.01, 1, label="检测阈值", interactive=True, value=0.25, step=0.01, info="置信度高于此值的检测结果会被返回")
-                headd_iou = gr.Slider(0.01, 1, label="重叠阈值", interactive=True, value=0.7, step=0.01, info="重叠区域高于此阈值将会被丢弃")
-                with gr.Accordion("使用说明", open=False):
-                    gr.Markdown("##头部检测"
-                                "来自imgutils检测模块"
-                                "###此功能会返回一个区域结果，而不是图片结果")
-                headd_button = gr.Button("开始检测", variant="primary")
-            with gr.Accordion("文本检测"):
-                with gr.Accordion("使用说明", open=False):
-                    gr.Markdown("文本检测\n"
-                                "用ocr的方式检测文本的模块\n"
-                                "此功能会返回一个区域结果，而不是图片结果\n"
-                                "此功能结果质量差，不建议使用")
-                textd_button = gr.Button("开始检测", variant="primary")
-            with gr.Accordion("区域填充"):
-                areaf_isRandom = gr.Checkbox(label="随机颜色", value=True, interactive=True)
-                areaf_color = gr.ColorPicker(label="自定义颜色", value="#00FF00", visible=not areaf_isRandom.value)
-                areaf_button = gr.Button("开始处理", variant="primary")
-                with gr.Accordion("使用说明", open=False):
-                    gr.Markdown("接收输出后的结果进行打码。\n"
-                                "运行结果内有区域信息，才可以填充...")
-                areaf_isRandom.select(color_picker_ctrl, None, [areaf_color])
-            with gr.Accordion("区域模糊"):
-                areab_radius = gr.Slider(1, 20, label="模糊强度", value=4, interactive=True, step=1)
-                areab_button = gr.Button("开始处理", variant="primary")
-                with gr.Accordion("使用说明", open=False):
-                    gr.Markdown("接收输出后的结果进行打码。\n"
-                                "运行结果内有区域信息，才可以模糊...")
-            with gr.Accordion("区域剪裁"):
-                crop_hw_button = gr.Button("开始处理", variant="primary")
-                with gr.Accordion("使用说明", open=False):
-                    gr.Markdown("将运行结果中的区域进行剪裁。\n"
-                                "运行结果内有区域信息，才可以剪裁...")
-            with gr.Accordion("自适应剪裁"):
-                crop_trans_button = gr.Button("开始处理", variant="primary")
-                crop_trans_thre = gr.Slider(0.01, 1, label="容差阈值", value=0.7, step=0.01)
-                crop_trans_filter = gr.Slider(0, 10, label="羽化", value=5, step=1)
-                with gr.Accordion("使用说明", open=False):
-                    gr.Markdown("将数据集中的透明图片进行自适应剪裁。\n"
-                                "不对运行结果中的内容进行操作。")
+                    gr.Markdown("关于快速操作\n"
+                                "需要强调的是，此UI是一个轻量化UI 不支持过大数据集与部分极限任务\n"
+                                "小苹果WebUI的设计理念是一个训练工具箱，用于执行轻量数据集的轻量操作\n"
+                                "因此部分快速操作的结果将暂存到内存中，部分快速操作的输入也会从内存结果中读取，而不是从源数据集中读取\n"
+                                "这使得你可以随心组装，选择自己需要的工作流程")
+                    # TODO 未来将支持输入输出端点可视化
+            with gr.Tab("区域检测"):
+                # with gr.Accordion("人物检测"):
+                #     ccip_level = gr.Checkbox(label="使用高精度", value=True, interactive=True)
+                #     ccip_model = gr.Dropdown(["v0", "v1", "v1.1"], label="模型选择", value="v1.1", interactive=True)
+                #     ccip_infer = gr.Slider(32, 2048, label="缩放大小", interactive=True, step=32, value=640, info="图像传递给模型时的缩放尺寸")
+                #     ccip_conf = gr.Slider(0.01, 1, label="检测阈值", interactive=True, value=0.25, step=0.01, info="置信度高于此值的检测结果会被返回")
+                #     ccip_iou = gr.Slider(0.01, 1, label="重叠阈值", interactive=True, value=0.7, step=0.01, info="重叠区域高于此阈值将会被丢弃")
+                #     ccip_button = gr.Button("开始检测", variant="primary")
+                #     with gr.Accordion("使用说明", open=False):
+                #         gr.Markdown("角色检测：CCIP（对比角色图像预训练）从动漫角色图像中提取特征，计算两个角色之间的视觉差异，并确定两个图像是否"
+                #                     "描绘相同的角色。![ccip](markdown_res/ccip_full.plot.py.svg)"
+                #                     "更多信息可查阅 [CCIP官方文档](https://deepghs.github.io/imgutils/main/api_doc/metrics/ccip.html).")
+                with gr.Accordion("面部检测"):
+                    faced_level = gr.Checkbox(value=True, label="使用高精度", interactive=True)
+                    faced_model = gr.Dropdown(["v0", "v1", "v1.3", "v1.4"], label="模型选择", value="v1.4", interactive=True)
+                    faced_infer = gr.Slider(32, 2048, label="缩放大小", interactive=True, step=32, value=640, info="图像传递给模型时的缩放尺寸")
+                    faced_conf = gr.Slider(0.01, 1, label="检测阈值", interactive=True, value=0.25, step=0.01, info="置信度高于此值的检测结果会被返回")
+                    faced_iou = gr.Slider(0.01, 1, label="重叠阈值", interactive=True, value=0.7, step=0.01, info="重叠区域高于此阈值将会被丢弃")
+                    with gr.Accordion("使用说明", open=False):
+                        gr.Markdown("##面部检测"
+                                    "来自imgutils检测模块"
+                                    "###此功能会返回一个区域结果，而不是图片结果")
+                    faced_button = gr.Button("开始检测", variant="primary")
+                with gr.Accordion("头部检测"):
+                    headd_level = gr.Checkbox(value=True, label="使用高精度", interactive=True)
+                    headd_infer = gr.Slider(32, 2048, label="缩放大小", interactive=True, step=32, value=640, info="图像传递给模型时的缩放尺寸")
+                    headd_conf = gr.Slider(0.01, 1, label="检测阈值", interactive=True, value=0.25, step=0.01, info="置信度高于此值的检测结果会被返回")
+                    headd_iou = gr.Slider(0.01, 1, label="重叠阈值", interactive=True, value=0.7, step=0.01, info="重叠区域高于此阈值将会被丢弃")
+                    with gr.Accordion("使用说明", open=False):
+                        gr.Markdown("##头部检测"
+                                    "来自imgutils检测模块"
+                                    "###此功能会返回一个区域结果，而不是图片结果")
+                    headd_button = gr.Button("开始检测", variant="primary")
+                with gr.Accordion("文本检测"):
+                    with gr.Accordion("使用说明", open=False):
+                        gr.Markdown("文本检测\n"
+                                    "用ocr的方式检测文本的模块\n"
+                                    "此功能会返回一个区域结果，而不是图片结果\n"
+                                    "此功能结果质量差，不建议使用")
+                    textd_button = gr.Button("开始检测", variant="primary")
+            with gr.Tab("区域处理"):
+                with gr.Accordion("区域填充"):
+                    areaf_isRandom = gr.Checkbox(label="随机颜色", value=True, interactive=True)
+                    areaf_color = gr.ColorPicker(label="自定义颜色", value="#00FF00", visible=not areaf_isRandom.value)
+                    areaf_button = gr.Button("开始处理", variant="primary")
+                    with gr.Accordion("使用说明", open=False):
+                        gr.Markdown("接收输出后的结果进行打码。\n"
+                                    "运行结果内有区域信息，才可以填充...")
+                    areaf_isRandom.select(color_picker_ctrl, None, [areaf_color])
+                with gr.Accordion("区域模糊"):
+                    areab_radius = gr.Slider(1, 20, label="模糊强度", value=4, interactive=True, step=1)
+                    areab_button = gr.Button("开始处理", variant="primary")
+                    with gr.Accordion("使用说明", open=False):
+                        gr.Markdown("接收输出后的结果进行打码。\n"
+                                    "运行结果内有区域信息，才可以模糊...")
+                with gr.Accordion("区域剪裁"):
+                    crop_hw_button = gr.Button("开始处理", variant="primary")
+                    with gr.Accordion("使用说明", open=False):
+                        gr.Markdown("将运行结果中的区域进行剪裁。\n"
+                                    "运行结果内有区域信息，才可以剪裁...")
+            with gr.Tab("快捷工具"):
+                with gr.Accordion("快速镜像"):
+                    mirror_pickup = gr.Button("选择文件夹", variant="primary")
+                    with gr.Accordion("使用说明", open=False):
+                        gr.Markdown("可选择多个文件夹，直到手动取消\n"
+                                    "程序将自动帮你处理所有图像的镜像操作以及标签文件\n")
+                    with gr.Accordion("快捷工具说明", open=False):
+                        gr.Markdown("此类工具部分是为kohya设计的\n"
+                                    "由于kohya数据集结构特殊，我们无法直接读取和处理kohya数据集的内容\n"
+                                    "此类工具大部分使用了os库，因此你可以用它们处理计算机上任何位置的内容")
         with gr.Tab("打标器"):
             taggers = ["wd14", "mldanbooru", "json解析"]
             tagger_type = gr.Dropdown(taggers, value=taggers[0], label="打标器", allow_custom_value=False, interactive=True)
@@ -1246,6 +1308,7 @@ if __name__ == "__main__":
             save_output = gr.Button("💾", elem_id="save_output", interactive=False)
             message_output.change(save_output_ctrl, [], save_output)
         # dl_count.change(None, )
+        mirror_pickup.click(mirror_process, [], [message_output])
         auto_crawl_1_button.click(auto_crawler, [auto_crawl_1_chars, auto_crawl_1_number], [])
         auto_crawl_2_button.click(auto_crawler, [auto_crawl_2_chars, auto_crawl_2_number], [])
         auto_crawl_3_button.click(auto_crawler, [auto_crawl_3_chars, auto_crawl_3_number], [])
@@ -1258,7 +1321,8 @@ if __name__ == "__main__":
         pixiv_get_token.click(get_ref_token, [], [])
         fanbox_get_cookie.click(get_fanbox_cookie, [], [])
         # fast_button.click(get_danbooru_fast, [fast_tag], [])
-        illu_getter_button.click(illu_getter, [illu_getter_pic], [message_output, illu_name])
+        # illu_getter_button.click(illu_getter, [illu_getter_pic], [message_output, illu_name])
+        illu_getter_pic.upload(illu_getter, [illu_getter_pic], [message_output, illu_name])
         download_button.click(download_images, [source, char_name, pre_min_size, pre_background, pre_class, pre_rating, pre_crop_person, pre_ccip_option, pre_auto_tagging, dl_count, pixiv_no_ai],
                               [message_output], scroll_to_output=True)
         ref_datasets_button.click(ref_datasets, [], [dataset_dropdown])
