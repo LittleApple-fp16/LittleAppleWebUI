@@ -161,6 +161,7 @@ def dataset_getImg(dataset_name):  # 确保每个方法中只调用一次 由于
 def download_illust(i_name, i_source, i_maxsize=None):
     global pyapi
     global cfg
+    global output_cache
     gr.Info("开始获取数据集")
     maxsize = round(float(i_maxsize), 1) if i_maxsize else None
     try:
@@ -188,10 +189,12 @@ def download_illust(i_name, i_source, i_maxsize=None):
         if 1 in i_source:
             kemono_dl(kemono_arg)
         gr.Info(i_name+" 数据集获取已结束")
+        output_cache = []
         return "下载已结束"
     except Exception as exp:
         gr.Warning("数据集获取失败, 请查看控制台")
         logger.error(f"[错误] - 获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须设置Kemono令牌才能获取Fanbox的内容\n你必须输入正确的画师名, 错误信息:{exp}")
+        output_cache = []
         return "获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须设置Kemono令牌才能获取Fanbox的内容\n你必须输入正确的画师名"
 
 
@@ -243,6 +246,31 @@ def has_image(got_list):
         return False
 
 
+def has_area(got_list):
+    if isinstance(got_list, list) and all(
+        isinstance(item, list) and len(item) == 1 and
+        isinstance(item[0], tuple) and len(item[0]) == 3 and
+        isinstance(item[0][0], tuple) and len(item[0][0]) == 4 and
+        all(isinstance(n, int) for n in item[0][0]) and
+        isinstance(item[0][1], str) and
+        isinstance(item[0][2], float)
+        for item in got_list
+    ):
+        return True
+    return False
+
+
+def get_output_status(o_cache):
+    if has_image(o_cache):
+        return "暂存图像结果"+"["+str(len(o_cache))+"] | "
+    elif has_area(o_cache):
+        return "暂存区域结果"+"["+str(len(o_cache))+"] | "
+    elif not o_cache:
+        return "运行结果是空的 "
+    else:
+        return "运行结果异常 "
+
+
 async def illu_getter(pic):
     global cfg
     global output_cache
@@ -272,9 +300,13 @@ async def illu_getter(pic):
 
 
 def clustering(dataset_name, thre):
-    gr.Info("差分过滤开始处理")
     global output_cache
-    images = dataset_getImg(dataset_name)[0]
+    if has_image(output_cache):
+        images = output_cache
+        gr.Info("差分过滤开始处理 <- 缓存")
+    else:
+        images = dataset_getImg(dataset_name)[0]
+        gr.Info("差分过滤开始处理 <- 数据集")
     # print(clusters)
     clustered_imgs = []
     added_clusters = set()  # 创建一个集合 其中存储已经添加过的标签 此集合将约束被过滤的img列表 集合中的元素无法dup
@@ -287,7 +319,7 @@ def clustering(dataset_name, thre):
             added_clusters.add(cluster)
     gr.Info("差分过滤已结束")
     output_cache = clustered_imgs
-    return clustered_imgs
+    return get_output_status(output_cache)+"上次操作: 差分过滤"
 
 
 def three_stage(dataset_name):
@@ -322,8 +354,12 @@ def three_stage(dataset_name):
 
 def face_detect(dataset_name, level, version, max_infer_size, conf_threshold, iou_threshold):
     global output_cache
-    gr.Info("面部检测开始处理")
-    images = dataset_getImg(dataset_name)[0]
+    if has_image(output_cache):
+        images = output_cache
+        gr.Info("面部检测开始处理 <- 缓存")
+    else:
+        images = dataset_getImg(dataset_name)[0]
+        gr.Info("面部检测开始处理 <- 数据集")
     detected = []
     if level:
         level = "s"
@@ -335,13 +371,17 @@ def face_detect(dataset_name, level, version, max_infer_size, conf_threshold, io
         detected.append(detect_faces(img, level, version, max_infer_size, conf_threshold, iou_threshold))
     gr.Info("面部检测已结束")
     output_cache = detected
-    return detected
+    return get_output_status(output_cache)+"上次操作: 面部检测"
 
 
 def head_detect(dataset_name, level, max_infer_size, conf_threshold, iou_threshold):
     global output_cache
-    gr.Info("头部检测开始处理")
-    images = dataset_getImg(dataset_name)[0]
+    if has_image(output_cache):
+        images = output_cache
+        gr.Info("头部检测开始处理 <- 缓存")
+    else:
+        images = dataset_getImg(dataset_name)[0]
+        gr.Info("头部检测开始处理 <- 数据集")
     detected = []
     if level:
         level = "s"
@@ -353,19 +393,23 @@ def head_detect(dataset_name, level, max_infer_size, conf_threshold, iou_thresho
         detected.append(detect_heads(img, level, max_infer_size, conf_threshold, iou_threshold))
     gr.Info("头部检测已结束")
     output_cache = detected
-    return detected
+    return get_output_status(output_cache)+"上次操作: 头部检测"
 
 
 def text_detect(dataset_name):
     global output_cache
-    gr.Info("文本检测开始处理")
-    images = dataset_getImg(dataset_name)[0]
+    if has_image(output_cache):
+        images = output_cache
+        gr.Info("文本检测开始处理 <- 缓存")
+    else:
+        images = dataset_getImg(dataset_name)[0]
+        gr.Info("文本检测开始处理 <- 数据集")
     detected = []
     for img in tqdm(images, file=sys.stdout, ascii="░▒█", desc=" - 文本检测开始处理"):
         detected.append(detect_text_with_ocr(img))
     gr.Info("文本检测已结束")
     output_cache = detected
-    return detected
+    return get_output_status(output_cache)+"上次操作: 文本检测"
 
 
 def area_fill(dataset_name, is_random, color):
@@ -391,7 +435,7 @@ def area_fill(dataset_name, is_random, color):
     #     sv.save(f"processed/{dataset_name}/{dataset_name}_AreaFill_{i+1}.png")
     gr.Info("区域填充已结束")
     output_cache = fill
-    return fill
+    return get_output_status(output_cache)+"上次操作: 区域填充"
 
 
 def area_blur(dataset_name, rad):
@@ -410,7 +454,7 @@ def area_blur(dataset_name, rad):
             blur.append(img)
     output_cache = blur
     gr.Info("区域模糊已结束")
-    return blur
+    return get_output_status(output_cache)+"上次操作: 区域模糊"
 
 
 def crop_hw(dataset_name):
@@ -439,34 +483,42 @@ def crop_hw(dataset_name):
                 return "此内容不支持剪裁"
             result.append(squeeze(img, mask))
     output_cache = result
-    return result
+    return get_output_status(output_cache)+"上次操作: 区域剪裁"
 
 
 def crop_trans(dataset_name, threshold, filter_size):
     global output_cache
-    gr.Info("自适应裁剪开始处理")
-    images = dataset_getImg(dataset_name)[0]
+    if has_image(output_cache):
+        images = output_cache
+        gr.Info("自适应剪裁开始处理 <- 缓存")
+    else:
+        images = dataset_getImg(dataset_name)[0]
+        gr.Info("自适应剪裁开始处理 <- 数据集")
     out = []
     # print(" - 自适应裁剪开始处理")
-    for img in tqdm(images, file=sys.stdout, desc=" - 自适应裁剪开始处理", ascii="░▒█"):
+    for img in tqdm(images, file=sys.stdout, desc=" - 自适应剪裁开始处理", ascii="░▒█"):
         if img is not None:
             out.append(squeeze_with_transparency(img, threshold, filter_size))
-    gr.Info("自适应裁剪已结束")
+    gr.Info("自适应剪裁已结束")
     output_cache = out
-    return out
+    return get_output_status(output_cache)+"上次操作: 自适应剪裁"
 
 
 def img_segment(dataset_name, scale):
     global output_cache
-    gr.Info("人物分离开始处理")
-    images = dataset_getImg(dataset_name)[0]
+    if has_image(output_cache):
+        images = output_cache
+        gr.Info("人物分离开始处理 <- 缓存")
+    else:
+        images = dataset_getImg(dataset_name)[0]
+        gr.Info("人物分离开始处理 <- 数据集")
     out = []
     # print(" - 人物分离开始处理")
     for img in tqdm(images, file=sys.stdout, desc=" - 人物分离开始处理", ascii="░▒█"):
         out.append(segment_rgba_with_isnetis(img, scale)[1])  # mask信息被丢弃了
     gr.Info("人物分离已结束")
     output_cache = out
-    return out
+    return get_output_status(output_cache)+"上次操作: 人物分离"
 
 
 def ref_datasets(need_list=False):
@@ -646,10 +698,8 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
     global output_cache
     images = dataset_getImg(dataset_name)[0]
     img_name = dataset_getImg(dataset_name)[1]
-    result = []
     if ttype == taggers[0]:
         gr.Info("数据打标开始处理 打标器: wd14")
-        # print(" - 数据打标开始处理")
         for img, name in tzip(images, img_name, file=sys.stdout, ascii="░▒█", desc=" - 数据打标开始处理"):
             result = get_wd14_tags(img, wd14_tagger, wd14_general_thre, wd14_character_thre, wd14_overlap)
             if result[2]:
@@ -722,8 +772,7 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
                 tag_json_character = tag_json_character.replace(' ', ', ')
             if tag_json_general is None and tag_json_character is None:
                 gr.Warning("标签解析: 数据集内无json标签")
-                output_cache = []
-                return "无标签"
+                return get_output_status(output_cache)+"标签解析失败"
             elif tag_json_general is None:
                 tag_json = tag_json_character
             elif tag_json_character is None:
@@ -792,7 +841,7 @@ def save_settings(p_token, f_cookie, c_token, pro_ip, pro_host, pro_enabled, the
     gr.Info("设置已保存")
     load_settings()
     # 刷新设置页面
-    return "设置已保存"
+    return get_output_status(output_cache)+"设置已保存"
 
 
 def load_settings():
@@ -931,7 +980,7 @@ def pipeline_start(ch_names):
         gr.Info(f"[{ch}]" + " 全自动训练完成")
         logger.success("已完成"+ch+"角色上传")
     gr.Info("所有全自动训练任务完成")
-    return "所有任务完成"
+    return get_output_status(output_cache)+"所有任务完成"
 
 
 def get_hf_token():
@@ -1001,7 +1050,7 @@ def mirror_process():
                     tag_count = tag_count + 1
     logger.success("快速镜像处理完成，输出位置与源文件夹位置相同")
     gr.Info("快速镜像处理完成")
-    return "处理完毕, 共处理" + str(img_count) + "张图片, " + str(tag_count) + "个tag文件"
+    return get_output_status(output_cache)+"处理完毕, 共处理" + str(img_count) + "张图片, " + str(tag_count) + "个tag文件"
 
 
 if __name__ == "__main__":
@@ -1100,10 +1149,9 @@ if __name__ == "__main__":
                                     "*会暂存背景为透明的人物图片结果\n"
                                     "查阅skytnt的[复杂动漫抠像](https://github.com/SkyTNT/anime-segmentation/)")
                     seg_button = gr.Button("开始处理", variant="primary")
-                with gr.Accordion("使用说明", open=False):
+                with gr.Accordion("快速操作说明", open=False):
                     gr.Markdown("关于快速操作\n"
-                                "需要强调的是，此UI是一个轻量化UI 不支持过大数据集与部分极限任务\n"
-                                "小苹果WebUI的设计理念是一个训练工具箱，用于执行轻量数据集的轻量操作\n"
+                                "小苹果WebUI的设计理念是一个训练工具箱，用于执行轻量数据集的轻量操作，不支持过大数据集与部分极限任务\n"
                                 "因此部分快速操作的结果将暂存到内存中，部分快速操作的输入也会从内存结果中读取，而不是从源数据集中读取\n"
                                 "这使得你可以随心组装，选择自己需要的工作流程")
                     # TODO 未来将支持输入输出端点可视化
@@ -1147,6 +1195,9 @@ if __name__ == "__main__":
                                     "此功能会返回一个区域结果，而不是图片结果\n"
                                     "此功能结果质量差，不建议使用")
                     textd_button = gr.Button("开始检测", variant="primary")
+                with gr.Accordion("区域检测说明", open=False):
+                    gr.Markdown("此选项卡中的操作是检测操作\n"
+                                "可接受结果中的图像，将暂存区域信息\n")
             with gr.Tab("区域处理"):
                 with gr.Accordion("区域填充"):
                     areaf_isRandom = gr.Checkbox(label="随机颜色", value=True, interactive=True)
