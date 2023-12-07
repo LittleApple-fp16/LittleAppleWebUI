@@ -113,7 +113,7 @@ pilmoji==2.0.4
 pixivpy3==3.7.3
 platformdirs==3.11.0
 pre-commit==3.5.0
-protobuf==4.24.4
+protobuf
 psutil==5.9.6
 pyarrow==13.0.0
 pyasn1==0.5.0
