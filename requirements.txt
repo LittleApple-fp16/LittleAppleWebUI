@@ -184,7 +184,7 @@ websockets==11.0.3
 Werkzeug==3.0.0
 win32-setctime==1.1.0
 wrapt==1.15.0
-xformers==0.0.22
+
 xmltodict==0.13.0
 yarl==1.9.2
 yattag==1.15.1
