@@ -133,9 +133,8 @@ pyreadline3==3.4.1
 python-dateutil==2.8.2
 python-multipart==0.0.6
 pytimeparse==1.1.8
-pytorch-lightning==1.9.0
+pytorch-lightning==1.2.9
 pytz==2023.3.post1
-PyYAML==5.4.1
 rapidfuzz==3.4.0
 referencing==0.30.2
 regex==2023.10.3
@@ -166,7 +165,6 @@ threadpoolctl==3.2.0
 tokenizers==0.15.0
 toolz==0.12.0
 
-torchmetrics==1.2.0
 torchsde==0.2.6
 
 tqdm==4.66.1

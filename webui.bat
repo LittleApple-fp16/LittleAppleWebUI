@@ -4,6 +4,9 @@ title=LittleAppleWebui
 SET VENV_NAME=venv
 SET PYTHON=python
 
+echo [info] Auto update...
+git pull
+
 if not exist %VENV_NAME% (
     echo [init] Creating venv...
     %PYTHON% -m venv %VENV_NAME%
@@ -24,8 +27,6 @@ set "path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\
 
 echo [info] Activating...
 call %VENV_NAME%\Scripts\activate.bat
-echo [info] Auto update...
-git pull
 echo [info] Starting webui...
 %PYTHON% webui.py %*
 pause
