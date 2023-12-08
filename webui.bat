@@ -14,8 +14,9 @@ if not exist %VENV_NAME% (
     @rem [init] Setting path...
     set "path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%"
     echo [init] Installing deps...
-    python -m pip install xformers==0.0.22 --no-deps
     python -m pip install --upgrade pip
+    python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+    python -m pip install xformers==0.0.22 --no-deps
     pip install -r requirements.txt
     echo [info] Done. Please restart.
     pause
