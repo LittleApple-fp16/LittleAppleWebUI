@@ -196,9 +196,9 @@ PicImageSearch==3.9.6
 pypinyin==0.49.0
 pykakasi==2.2.1
 
-torch==2.1.1 --find-links https://download.pytorch.org/whl/cu118
-torchvision==0.15.2 --find-links https://download.pytorch.org/whl/cu118
-torchaudio==2.0.2 --find-links https://download.pytorch.org/whl/cu118
+torch==2.1.0 --find-links https://download.pytorch.org/whl/cu118
+torchvision --find-links https://download.pytorch.org/whl/cu118
+torchaudio --find-links https://download.pytorch.org/whl/cu118
 # sd-scripts
 ftfy==6.1.1
 easygui==0.98.3
