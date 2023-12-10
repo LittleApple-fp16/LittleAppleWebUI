@@ -549,7 +549,8 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                             version_name: Optional[str] = None, version_desc_md: str = None,
                             step: Optional[int] = None, epoch: Optional[int] = None, upload_min_epoch: int = 6,
                             draft: bool = False, publish_at=None, allow_nsfw_images: bool = True,
-                            force_create_model: bool = False, no_ccip_check: bool = False, session=None, is_pipeline=False, is_kohya=False):
+                            force_create_model: bool = False, no_ccip_check: bool = False, session=None,
+                            is_pipeline=False, is_kohya=False, toml_index=0):
     if isinstance(source, Character):
         repo = f'AppleHarem/{get_ch_name(source)}'
     elif isinstance(source, str):
@@ -1062,13 +1063,20 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
             char_name = ' '.join(trigger_word.split('_')[:-1])
             session = session or get_civitai_session(timeout=30)
 
+            param_author = {
+                0: "[AppleHarem](https://huggingface.co/AppleHarem)",
+                1: "[i1998](https://civitai.com/user/i1998)",
+                2: "Unknown"
+            }
+            get_author = param_author.get(toml_index, "Unknown")
             model_desc_default = f"""
                         * **YOU CAN ALSO FIND THIS MODEL ON HUGGINGFACE [HUGGINGFACE](https://huggingface.co/{repo})**.
                         * **<span style="color:#52fa72">THIS MODEL HAS ONE FILE. ENJOY IT.</span>**
-                        * **If you see this line, the model usually not include trigger words**.
+                        * **The trigger word is `{trigger_word}`, and the recommended tags are `{', '.join(recommended_tags)}`.**.
                         * Recommended weight is 0.5-0.85. 
                         * Images were generated using a few fixed prompts and dataset-based clustered prompts(TODO). Random seeds were used, ruling out cherry-picking. **What you see here is what you can get.**
                         * No specialized training was done for outfits. You can check our provided preview post to get the prompts corresponding to the outfits.
+                        * This model is trained with **{plural_word(dataset_size, "image")}**.
 
                         ## How to Use This Model
 
@@ -1089,6 +1097,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                         ## How This Model Is Trained
 
                         This model is trained with [kohya-ss' sd-script](https://github.com/kohya-ss/sd-scripts). 
+                        Using auto-fulled param by {get_author}.
                         And the auto-training framework is maintained by [DeepGHS Team](https://huggingface.co/deepghs).
                         And the WebUI Panel provid by [LittleAppleWebUI](https://github.com/LittleApple-fp16/LittleAppleWebUI)
 

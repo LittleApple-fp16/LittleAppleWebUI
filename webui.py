@@ -985,7 +985,8 @@ def pipeline_start(ch_names, train_type, toml_index):
                 step=steps, epoch=epochs, draft=draft,
                 publish_at=publish_time, allow_nsfw_images=allow_nsfw,
                 version_name=version_name, force_create_model=force_create,
-                no_ccip_check=no_ccip_check, session=session, is_pipeline=is_pipeline, is_kohya=is_kohya
+                no_ccip_check=no_ccip_check, session=session, is_pipeline=is_pipeline,
+                is_kohya=is_kohya, toml_index=toml_index
             )
             url = f'https://civitai.com/models/{model_id}'
             if not draft:
