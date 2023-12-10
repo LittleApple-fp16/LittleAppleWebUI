@@ -311,7 +311,7 @@ def export_workdir(workdir: str, export_dir: str, n_repeats: int = 2,
         all_scores_lst = []
         all_drawings = {}
         epochs = []
-        for file_path in os.path.join(workdir, '*.safetensors'):
+        for file_path in glob.glob(os.path.join(workdir, '*.safetensors')):
             drawings = draw_with_workdir_kohya(
                         workdir, lora_path=file_path,
                         pretrained_model=pretrained_model,
