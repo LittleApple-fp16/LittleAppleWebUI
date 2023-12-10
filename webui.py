@@ -909,15 +909,15 @@ def pipeline_start(ch_names, train_type, toml_index):
         else:
             save_path = "pipeline\\dataset\\_kohya\\" + ch_e + f"\\1_{ch_e}"
 ###
-#         source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
-#         source_init.attach(*actions).export(
-#             TextualInversionExporter(save_path)
-#         )
-# ###
-#         if not is_kohya:
-#             run_train_plora(ch_e, bs=4, epoc=10, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
-#         else:
-#             run_train_lora(ch_e, bs=4, epoch=10, toml_index=toml_index, is_pipeline=True)
+        source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+        source_init.attach(*actions).export(
+            TextualInversionExporter(save_path)
+        )
+###
+        if not is_kohya:
+            run_train_plora(ch_e, bs=4, epoc=10, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
+        else:
+            run_train_lora(ch_e, bs=4, epoch=10, toml_index=toml_index, is_pipeline=True)
 ###
 
         def huggingface(workdir: str, repository, revision, n_repeats, pretrained_model,
