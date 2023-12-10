@@ -117,7 +117,7 @@ def deploy_to_huggingface(workdir: str, o_repository=None, revision: str = 'main
         logging.info(f'Useless files: {sorted(pre_exist_files)} ...')
         for file in sorted(pre_exist_files):
             if '.' in file:
-                operations.append(CommitOperationDelete(path_in_repo=file))
+                operations.append(CommitOperationDelete(path_in_repo=Path(file).as_posix()))
 
         tokyo_tz = pytz.timezone('Asia/Tokyo')
         current_time = datetime.datetime.now().astimezone(tokyo_tz).strftime('%Y-%m-%d %H:%M:%S %Z')
