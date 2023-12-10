@@ -561,11 +561,11 @@ def ref_customList(need_list=False):
 def ref_runs(dataset_name, need_list=False):
     runs_list = []
     try:
-        with os.scandir(f"runs/hcpdiff/{dataset_name}/ckpts") as conv_list:
+        with os.scandir(f"runs/{dataset_name}/ckpts") as conv_list:
             for conv in conv_list:
                 # print("遍历了一个conv")
                 if conv.is_file():
-                    if conv.name.endswith('.pt'):
+                    if conv.name.endswith('.pt') and not dataset_name == '_kohya':
                         runs_list.append(conv.name.replace(dataset_name+"-", "").replace(".pt", ""))
     except FileNotFoundError:
         if need_list:
@@ -590,11 +590,13 @@ def run_train_lora(dataset_name, epoch, bs, toml_index, is_pipeline=False):
     else:
         r_dataset_name = dataset_name.replace(" (kohya)", "")
         if not is_pipeline:
-            kohya_train_lora("dataset/_kohya/"+r_dataset_name, r_dataset_name, "runs/kohya/"+r_dataset_name, epoch, bs, toml_index)
-            save_recommended_tags("dataset/_kohya/"+r_dataset_name, r_dataset_name, "runs/kohya/"+r_dataset_name)
+            kohya_train_lora("dataset/_kohya/"+r_dataset_name, r_dataset_name, "runs/_kohya/"+r_dataset_name, epoch, bs, toml_index)
+            for folder_name in os.listdir(f"dataset/_kohya/{r_dataset_name}"):
+                if re.match(r"\d+_", folder_name):
+                    save_recommended_tags(f"dataset/_kohya/{r_dataset_name}/{folder_name}", r_dataset_name, f"runs/_kohya/{r_dataset_name}")
         else:
             kohya_train_lora("pipeline/dataset/_kohya/" + r_dataset_name, r_dataset_name, "pipeline/runs/_kohya/" + r_dataset_name, epoch, bs, toml_index)
-            save_recommended_tags("pipeline/dataset/_kohya/" + r_dataset_name, r_dataset_name, "pipeline/runs/_kohya/" + r_dataset_name)
+            save_recommended_tags(f"pipeline/dataset/_kohya/{r_dataset_name}/1_{r_dataset_name}", r_dataset_name, f"pipeline/runs/_kohya/{r_dataset_name}")
     return "LoRA训练完成"
 
 
