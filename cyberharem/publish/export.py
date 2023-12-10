@@ -328,6 +328,7 @@ def export_workdir(workdir: str, export_dir: str, n_repeats: int = 2,
                 epochs.sort()
                 # 最大epoch加增量
                 epoch = (epochs[-1] + max(set([j - i for i, j in zip(epochs[:-1], epochs[1:])]), key=[j - i for i, j in zip(epochs[:-1], epochs[1:])].count))
+                epochs.append(int(epoch))
             epoch_dir = os.path.join(export_dir, f'{epoch}')
             preview_dir = os.path.join(epoch_dir, 'previews')
             os.makedirs(preview_dir, exist_ok=True)
