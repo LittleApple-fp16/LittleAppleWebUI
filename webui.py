@@ -909,15 +909,15 @@ def pipeline_start(ch_names, train_type, toml_index):
         else:
             save_path = "pipeline\\dataset\\_kohya\\" + ch_e + f"\\1_{ch_e}"
 ###
-        source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
-        source_init.attach(*actions).export(
-            TextualInversionExporter(save_path)
-        )
-###
-        if not is_kohya:
-            run_train_plora(ch_e, bs=4, epoc=10, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
-        else:
-            run_train_lora(ch_e, bs=4, epoch=10, toml_index=toml_index, is_pipeline=True)
+#         source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+#         source_init.attach(*actions).export(
+#             TextualInversionExporter(save_path)
+#         )
+# ###
+#         if not is_kohya:
+#             run_train_plora(ch_e, bs=4, epoc=10, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
+#         else:
+#             run_train_lora(ch_e, bs=4, epoch=10, toml_index=toml_index, is_pipeline=True)
 ###
 
         def huggingface(workdir: str, repository, revision, n_repeats, pretrained_model,
@@ -1000,10 +1000,12 @@ def pipeline_start(ch_names, train_type, toml_index):
                 rehf(repository=ch_e, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
             except Exception as e:
                 logger.error(" - 错误:", e)
+                raise e
         try:
             civitai(repository=ch_e, draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=cfg.get('civitai_token', ''), epochs=None, publish_time=None, steps=None, title=None, version_name=None)
         except Exception as e:
             logger.error(" - 错误:", e)
+            raise e
         gr.Info(f"[{ch}]" + " 全自动训练完成")
         logger.success("已完成"+ch+"角色上传")
     gr.Info("所有全自动训练任务完成")
