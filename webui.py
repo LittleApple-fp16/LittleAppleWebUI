@@ -247,6 +247,8 @@ def has_image(got_list):
 
 
 def has_area(got_list):
+    if not got_list:
+        return False
     if isinstance(got_list, list) and all(
         isinstance(item, list) and len(item) == 1 and
         isinstance(item[0], tuple) and len(item[0]) == 3 and
@@ -266,9 +268,9 @@ def get_output_status(o_cache):
     elif has_area(o_cache):
         return "暂存区域结果"+"["+str(len(o_cache))+"] | "
     elif not o_cache:
-        return "运行结果是空的 "
+        return "运行结果是空的 | "
     else:
-        return "运行结果异常 "
+        return "运行结果异常 | "
 
 
 async def illu_getter(pic):
@@ -580,14 +582,17 @@ def ref_runs(dataset_name, need_list=False):
             return gr.update(choices=runs_list)
 
 
-def run_train_lora(dataset_name, epoch, bs, toml_index):
+def run_train_lora(dataset_name, epoch, bs, toml_index, is_pipeline=False):
     logger.info("LoRA开始训练")
     gr.Info(f"[{dataset_name}] "+"LoRA开始训练")
     if not dataset_name.endswith(' (kohya)'):
         raise DatasetTypeError(dataset_name, "正在尝试加载kohya数据集")
     else:
         r_dataset_name = dataset_name.replace(" (kohya)", "")
-        kohya_train_lora("dataset/_kohya/"+r_dataset_name, r_dataset_name, "runs/kohya/"+r_dataset_name, epoch, bs, toml_index)
+        if not is_pipeline:
+            kohya_train_lora("dataset/_kohya/"+r_dataset_name, r_dataset_name, "runs/kohya/"+r_dataset_name, epoch, bs, toml_index)
+        else:
+            kohya_train_lora("pipeline/dataset/_kohya/" + r_dataset_name, r_dataset_name, "pipeline/runs/_kohya/" + r_dataset_name, epoch, bs, toml_index)
     return "LoRA训练完成"
 
 
@@ -827,6 +832,15 @@ def illu_source_limit(i_source):
     return updates
 
 
+def pipeline_type_limit(evt: gr.SelectData):
+    updates = {}
+    if evt.index == 1:
+        updates[pipeline_toml_presets] = gr.update(visible=True)
+    else:
+        updates[pipeline_toml_presets] = gr.update(visible=False)
+    return updates
+
+
 def save_settings(p_token, f_cookie, c_token, pro_ip, pro_host, pro_enabled, theme):
     global cfg
     cfg['pixiv_token'] = p_token
@@ -875,9 +889,10 @@ def pixiv_login():
         logger.warning("[警告] - Pixiv登录失败，已尝试三次，请前往设置检查刷新令牌，并尝试重新登录")
 
 
-def pipeline_start(ch_names):
+def pipeline_start(ch_names, train_type, toml_index):
     global output_cache
     global cfg
+    is_kohya = bool(train_type)
     riyu = kakasi()
     actions = [NoMonochromeAction(), CCIPAction(), PersonSplitAction(),  # ccip角色聚类
                HeadCountAction(1), TaggingAction(force=True),
@@ -889,29 +904,39 @@ def pipeline_start(ch_names):
         gr.Info(f"[{ch}]"+" 全自动训练开始")
         ch = ch.replace(' ', '_')
         ch_e = ''.join([r['hepburn']for r in riyu.convert(re.sub(r'[^\w\s()]', '', ''.join([word if not (u'\u4e00' <= word <= u'\u9fff') else lazy_pinyin(ch)[i] for i, word in enumerate(ch)])))]).replace(' ', '_')
-        save_path = "pipeline\\dataset\\" + ch_e
-        source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
-        source_init.attach(*actions).export(
-            TextualInversionExporter(save_path)
-        )
-        run_train_plora(ch_e, bs=4, epoc=10, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
+        if not is_kohya:
+            save_path = "pipeline\\dataset\\" + ch_e
+        else:
+            save_path = "pipeline\\dataset\\_kohya\\" + ch_e + f"\\1_{ch_e}"
+###
+#         source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+#         source_init.attach(*actions).export(
+#             TextualInversionExporter(save_path)
+#         )
+# ###
+#         if not is_kohya:
+#             run_train_plora(ch_e, bs=4, epoc=10, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
+#         else:
+#             run_train_lora(ch_e, bs=4, epoch=10, toml_index=toml_index, is_pipeline=True)
+###
 
         def huggingface(workdir: str, repository, revision, n_repeats, pretrained_model,
                         width, height, clip_skip, infer_steps):
             logging.try_init_root(logging.INFO)
             deploy_to_huggingface(
                 workdir, repository, revision, n_repeats, pretrained_model,
-                clip_skip, width, height, infer_steps, ds_dir=save_path
+                clip_skip, width, height, infer_steps, ds_dir=save_path, is_kohya=is_kohya
             )
 
         def rehf(repository, revision, n_repeats, pretrained_model,
                  width, height, clip_skip, infer_steps):
+            from pathlib import Path
             logging.try_init_root(logging.INFO)
             with TemporaryDirectory() as workdir:
                 logging.info(f'Downloading models for {workdir!r} ...')
                 hf_fs = cyber_get_hf_fs()
                 for f in tqdm(hf_fs.glob(f'{repository}/*/raw/*')):
-                    rel_file = os.path.relpath(f, repository)
+                    rel_file = Path(os.path.relpath(f, repository)).as_posix()
                     local_file = os.path.join(workdir, 'ckpts', os.path.basename(rel_file))
                     if os.path.dirname(local_file):
                         os.makedirs(os.path.dirname(local_file), exist_ok=True)
@@ -966,13 +991,15 @@ def pipeline_start(ch_names):
         # rehf(repository=ch_e, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
         # civitai(repository=ch_e, draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=cfg.get('civitai_token', ''), epochs=None, publish_time=None, steps=None, title=None, version_name=None)
         try:
-            huggingface(workdir='pipeline\\runs\\' + ch_e, repository=None, n_repeats=3, pretrained_model=_DEFAULT_INFER_MODEL, width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
+            huggingface(workdir='pipeline/runs/' + ('_kohya/' if is_kohya else '') + ch_e, repository=None, n_repeats=3, pretrained_model=_DEFAULT_INFER_MODEL, width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
         except Exception as e:
             logger.error(" - 错误:", e)
-        try:
-            rehf(repository=ch_e, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
-        except Exception as e:
-            logger.error(" - 错误:", e)
+            raise e
+        if not is_kohya:
+            try:
+                rehf(repository=ch_e, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
+            except Exception as e:
+                logger.error(" - 错误:", e)
         try:
             civitai(repository=ch_e, draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=cfg.get('civitai_token', ''), epochs=None, publish_time=None, steps=None, title=None, version_name=None)
         except Exception as e:
@@ -1273,10 +1300,11 @@ if __name__ == "__main__":
             plora_train_button = gr.Button("开始训练", variant="primary")
             with gr.Accordion("使用说明", open=False):
                 gr.Markdown("训练详细说明..什么的")
+        toml_presets = ['默认', '一杯哈萨姆', '琥珀青葉']
         with gr.Tab("LoRA训练"):
             lora_epoch = gr.Slider(1, 100, label="Epoch", value=10)
             lora_batch_size = gr.Slider(1, 64, label="Batch Size", value=1, step=1)
-            lora_toml_presets = gr.Radio(['默认', '一杯哈萨姆', '琥珀青葉'], label="参数", info="通用化的参数预设", type="index", value="默认", interactive=True)
+            lora_toml_presets = gr.Radio(toml_presets, label="参数", info="通用化的参数预设", type="index", value="默认", interactive=True)
             lora_train_button = gr.Button("开始训练", variant="primary")
         with gr.Tab("质量验证"):
             with gr.Accordion("使用说明", open=False):
@@ -1292,11 +1320,14 @@ if __name__ == "__main__":
                 gr.Markdown("上传权重到抱脸和C站 soon..")
         with gr.Tab("全自动训练"):
             pipeline_text = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的模型就出现在c站了》", info="要求角色名 用,分隔")
+            pipeline_type = gr.Radio(['PLoRA', 'LoRA'], label="训练类型", type="index", value="PLoRA", interactive=True)
+            pipeline_toml_presets = gr.Radio(toml_presets, label="参数", info="通用化的参数预设", type="index", value="默认", visible=False)
             pipeline_button = gr.Button("开始全自动训练", variant="primary")
             with gr.Accordion("使用说明", open=False):
                 gr.Markdown("《输入角色名然后你的模型就出现在c站了》\n"
                             "需要在设置中设置c站token\n"
                             "需要在计算机中添加环境变量: 键名 HF_TOKEN 值: 从登录的HuggingFace网站获取 在账号设置中创建访问令牌")
+            pipeline_type.select(pipeline_type_limit, None, [pipeline_toml_presets])
         with gr.Tab("全自动数据集"):
             with gr.Tab("1机"):
                 auto_crawl_1_chars = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的数据集就出现在抱脸了》", info="要求角色名 用,分隔")
@@ -1366,7 +1397,7 @@ if __name__ == "__main__":
         auto_crawl_1_status.click(auto_crawler_status, [auto_crawl_1_number], [])
         auto_crawl_2_status.click(auto_crawler_status, [auto_crawl_2_number], [])
         auto_crawl_3_status.click(auto_crawler_status, [auto_crawl_3_number], [])
-        pipeline_button.click(pipeline_start, [pipeline_text], [message_output])
+        pipeline_button.click(pipeline_start, [pipeline_text, pipeline_type, pipeline_toml_presets], [message_output])
         setting_save_button.click(save_settings, [pixiv_token, fanbox_cookie, civitai_token, proxie_ip, proxie_host, proxie_enabled, theme_select], [message_output])
         pixiv_manual_login.click(pixiv_login, [], [])
         pixiv_get_token.click(get_ref_token, [], [])

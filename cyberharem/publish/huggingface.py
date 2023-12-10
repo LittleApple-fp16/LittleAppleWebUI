@@ -3,6 +3,7 @@ import os
 import pathlib
 import pytz
 from typing import Optional
+from pathlib import Path
 
 from ditk import logging
 from hbutils.system import TemporaryDirectory
@@ -15,15 +16,18 @@ from ..infer.draw import _DEFAULT_INFER_MODEL
 from ..utils import get_hf_client, get_hf_fs
 
 
-def deploy_to_huggingface(workdir: str, repository=None, revision: str = 'main', n_repeats: int = 3,
+def deploy_to_huggingface(workdir: str, o_repository=None, revision: str = 'main', n_repeats: int = 3,
                           pretrained_model: str = _DEFAULT_INFER_MODEL, clip_skip: int = 2,
                           image_width: int = 512, image_height: int = 768, infer_steps: int = 30,
                           lora_alpha: float = 0.85, sample_method: str = 'DPM++ 2M Karras',
-                          model_hash: Optional[str] = None, ds_dir: str = None):
-    name, _ = find_steps_in_workdir(workdir)
-    repository = repository or f'AppleHarem/{name}'
+                          model_hash: Optional[str] = None, ds_dir: str = None, is_kohya: Optional[bool] = False):
+    if is_kohya:
+        name = os.path.basename(workdir)
+    else:
+        name, _ = find_steps_in_workdir(workdir)
+    repository = o_repository or f'AppleHarem/{name}'
 
-    logging.info(f'Initializing repository {repository!r} ...')
+    logging.info(f'Initializing repository {repository!r}{" (kohya)" if is_kohya else " (HCP)"} ...')
     hf_client = get_hf_client()
     hf_fs = get_hf_fs()
     if not hf_fs.exists(f'{repository}/.gitattributes'):
@@ -57,11 +61,17 @@ def deploy_to_huggingface(workdir: str, repository=None, revision: str = 'main',
             )
 
     with TemporaryDirectory() as td:
-        export_workdir(
-            workdir, td, n_repeats, pretrained_model,
-            clip_skip, image_width, image_height, infer_steps,
-            lora_alpha, sample_method, model_hash, ds_repo=ds_dir,  # ds_repo: 本地数据集或远端数据集
-        )
+        if is_kohya:
+            export_workdir(workdir, td, n_repeats, pretrained_model,
+                clip_skip, image_width, image_height, infer_steps,
+                lora_alpha, sample_method, model_hash, ds_repo=ds_dir, is_kohya=True,
+            )
+        else:
+            export_workdir(
+                workdir, td, n_repeats, pretrained_model,
+                clip_skip, image_width, image_height, infer_steps,
+                lora_alpha, sample_method, model_hash, ds_repo=ds_dir,  # ds_repo: 本地数据集或远端数据集
+            )
 
         try:
             hf_client.repo_info(repo_id=repository, repo_type='dataset')
@@ -97,7 +107,7 @@ def deploy_to_huggingface(workdir: str, repository=None, revision: str = 'main',
         for directory, _, files in os.walk(td):
             for file in files:
                 filename = os.path.abspath(os.path.join(td, directory, file))
-                file_in_repo = os.path.relpath(filename, td)
+                file_in_repo = Path(os.path.relpath(filename, td)).as_posix()
                 operations.append(CommitOperationAdd(
                     path_in_repo=file_in_repo,
                     path_or_fileobj=filename,
