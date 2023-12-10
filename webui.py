@@ -591,8 +591,10 @@ def run_train_lora(dataset_name, epoch, bs, toml_index, is_pipeline=False):
         r_dataset_name = dataset_name.replace(" (kohya)", "")
         if not is_pipeline:
             kohya_train_lora("dataset/_kohya/"+r_dataset_name, r_dataset_name, "runs/kohya/"+r_dataset_name, epoch, bs, toml_index)
+            save_recommended_tags("dataset/_kohya/"+r_dataset_name, r_dataset_name, "runs/kohya/"+r_dataset_name)
         else:
             kohya_train_lora("pipeline/dataset/_kohya/" + r_dataset_name, r_dataset_name, "pipeline/runs/_kohya/" + r_dataset_name, epoch, bs, toml_index)
+            save_recommended_tags("pipeline/dataset/_kohya/" + r_dataset_name, r_dataset_name, "pipeline/runs/_kohya/" + r_dataset_name)
     return "LoRA训练完成"
 
 
@@ -892,6 +894,8 @@ def pixiv_login():
 def pipeline_start(ch_names, train_type, toml_index):
     global output_cache
     global cfg
+    bs = 4
+    epoc = 10
     is_kohya = bool(train_type)
     riyu = kakasi()
     actions = [NoMonochromeAction(), CCIPAction(), PersonSplitAction(),  # ccip角色聚类
@@ -909,15 +913,15 @@ def pipeline_start(ch_names, train_type, toml_index):
         else:
             save_path = "pipeline\\dataset\\_kohya\\" + ch_e + f"\\1_{ch_e}"
 ###
-#         source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
-#         source_init.attach(*actions).export(
-#             TextualInversionExporter(save_path)
-#         )
-# ###
-#         if not is_kohya:
-#             run_train_plora(ch_e, bs=4, epoc=10, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
-#         else:
-#             run_train_lora(ch_e, bs=4, epoch=10, toml_index=toml_index, is_pipeline=True)
+        source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+        source_init.attach(*actions).export(
+            TextualInversionExporter(save_path)
+        )
+###
+        if not is_kohya:
+            run_train_plora(ch_e, bs=bs, epoc=epoc, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
+        else:
+            run_train_lora(ch_e, bs=bs, epoch=epoc, toml_index=toml_index, is_pipeline=True)
 ###
 
         def huggingface(workdir: str, repository, revision, n_repeats, pretrained_model,
@@ -972,14 +976,14 @@ def pipeline_start(ch_names, train_type, toml_index):
                 )
 
         def civitai(repository, title, steps, epochs, draft, publish_time, allow_nsfw,
-                    version_name, force_create, no_ccip_check, session=None):
+                    version_name, force_create, no_ccip_check, session=None, is_pipeline=False, is_kohya=False):
             logging.try_init_root(logging.INFO)
             model_id = civitai_publish_from_hf(
                 repository, title,
                 step=steps, epoch=epochs, draft=draft,
                 publish_at=publish_time, allow_nsfw_images=allow_nsfw,
                 version_name=version_name, force_create_model=force_create,
-                no_ccip_check=no_ccip_check, session=session
+                no_ccip_check=no_ccip_check, session=session, is_pipeline=is_pipeline, is_kohya=is_kohya
             )
             url = f'https://civitai.com/models/{model_id}'
             if not draft:
@@ -997,12 +1001,12 @@ def pipeline_start(ch_names, train_type, toml_index):
             raise e
         if not is_kohya:
             try:
-                rehf(repository=ch_e, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
+                rehf(repository=f'AppleHarem/{ch_e}', n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
             except Exception as e:
                 logger.error(" - 错误:", e)
                 raise e
         try:
-            civitai(repository=ch_e, draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=cfg.get('civitai_token', ''), epochs=None, publish_time=None, steps=None, title=None, version_name=None)
+            civitai(repository=f'AppleHarem/{ch_e}', draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=cfg.get('civitai_token', ''), epochs=epoc, publish_time=None, steps=None, title=None, version_name=None, is_pipeline=True, is_kohya=is_kohya)
         except Exception as e:
             logger.error(" - 错误:", e)
             raise e

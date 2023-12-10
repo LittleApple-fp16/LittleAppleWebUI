@@ -549,7 +549,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                             version_name: Optional[str] = None, version_desc_md: str = None,
                             step: Optional[int] = None, epoch: Optional[int] = None, upload_min_epoch: int = 6,
                             draft: bool = False, publish_at=None, allow_nsfw_images: bool = True,
-                            force_create_model: bool = False, no_ccip_check: bool = False, session=None):
+                            force_create_model: bool = False, no_ccip_check: bool = False, session=None, is_pipeline=False, is_kohya=False):
     if isinstance(source, Character):
         repo = f'AppleHarem/{get_ch_name(source)}'
     elif isinstance(source, str):
@@ -562,335 +562,617 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
 
     dataset_info = meta_json.get('dataset')
     ds_size = (384, 512) if not dataset_info or not dataset_info['type'] else dataset_info['type']
-    with load_dataset_for_character(repo, size=ds_size) as (_, d):
-        if dataset_info and dataset_info['size']:
-            dataset_size = dataset_info['size']
+    try:
+        ch_name = source.split("AppleHarem/")[1]
+        if is_pipeline:
+            dataset_local_dir = f'pipeline/dataset/{f"{ch_name}" if not is_kohya else "_kohya/" + f"{ch_name}/1_{ch_name}/"}'
         else:
-            dataset_size = len(glob.glob(os.path.join(d, '*.png')))
-        core_tags, _ = load_tags_from_directory(d)
-        logging.info(f'Size of dataset if {dataset_size!r}.')
+            dataset_local_dir = glob.glob(f"dataset/{'' if not is_kohya else '_kohya/'}{ch_name}/[1-100]*_{ch_name}/")
+        if os.path.exists(dataset_local_dir):
+            with load_dataset_for_character(dataset_local_dir, size=ds_size) as (_, d):
+                if dataset_info and dataset_info['size']:
+                    dataset_size = dataset_info['size']
+                else:
+                    dataset_size = len(glob.glob(os.path.join(d, '*.png')))
+                core_tags, _ = load_tags_from_directory(d)
+                logging.info(f'Size of dataset if {dataset_size!r}.')
 
-        ccip_feats = []
-        for item in tqdm(list(LocalSource(d)[:10]), desc='Extracting features'):
-            ccip_feats.append(ccip_extract_feature(item.image))
+                ccip_feats = []
+                for item in tqdm(list(LocalSource(d)[:10]), desc='Extracting features'):
+                    ccip_feats.append(ccip_extract_feature(item.image))
+        else:
+            with load_dataset_for_character(repo, size=ds_size) as (_, d):
+                if dataset_info and dataset_info['size']:
+                    dataset_size = dataset_info['size']
+                else:
+                    dataset_size = len(glob.glob(os.path.join(d, '*.png')))
+                core_tags, _ = load_tags_from_directory(d)
+                logging.info(f'Size of dataset if {dataset_size!r}.')
+
+                ccip_feats = []
+                for item in tqdm(list(LocalSource(d)[:10]), desc='Extracting features'):
+                    ccip_feats.append(ccip_extract_feature(item.image))
+    except ValueError:
+        logging.info('No dataset in AppleHarem.')
+        # ch_name = source.split("AppleHarem/")[1]
+        # if is_pipeline:
+        #     dataset_local_dir = f'pipeline/dataset/{f"{ch_name}" if not is_kohya else "_kohya/" + f"{ch_name}/1_{ch_name}/"}'
+        # else:
+        #     dataset_local_dir = glob.glob(f"dataset/{'' if not is_kohya else '_kohya/'}{ch_name}/[1-100]*_{ch_name}/")
+        # dataset_size = int(len(os.listdir(dataset_local_dir)) / 3)
 
     version_name = version_name or meta_json.get('mark') or 'v1.0'
-    all_steps = meta_json['steps']
-    logging.info(f'Available steps: {all_steps!r}.')
-    if step is not None:
-        if epoch is not None:
-            logging.warning(f'Step {step!r} is set, epoch value ({epoch}) will be ignored.')
-    else:
-        if epoch is not None:
-            step = dataset_size * epoch
+    if not is_kohya:
+        all_steps = meta_json['steps']
+        logging.info(f'Available steps: {all_steps!r}.')
+        if step is not None:
+            if epoch is not None:
+                logging.warning(f'Step {step!r} is set, epoch value ({epoch}) will be ignored.')
         else:
-            if 'best_step' in meta_json:
-                if upload_min_epoch is not None:
-                    upload_min_step = upload_min_epoch * dataset_size
-                else:
-                    upload_min_step = -1
-                best_step, best_score = None, None
-                for score_item in meta_json["scores"]:
-                    if best_step is None or \
-                            (score_item['step'] >= upload_min_step and score_item['score'] >= best_score):
-                        best_step, best_score = score_item['step'], score_item['score']
-
-                if best_step is not None:
-                    step = best_step
-                else:
-                    step = meta_json['best_step']
+            if epoch is not None:
+                step = dataset_size * epoch
             else:
-                step = max(all_steps)
+                if 'best_step' in meta_json:
+                    if upload_min_epoch is not None:
+                        upload_min_step = upload_min_epoch * dataset_size
+                    else:
+                        upload_min_step = -1
+                    best_step, best_score = None, None
+                    for score_item in meta_json["scores"]:
+                        if best_step is None or \
+                                (score_item['step'] >= upload_min_step and score_item['score'] >= best_score):
+                            best_step, best_score = score_item['step'], score_item['score']
 
-    logging.info(f'Expected step is {step!r}.')
-    _, _actual_step = sorted([(abs(s - step), s) for s in all_steps])[0]
-    if _actual_step != step:
-        logging.info(f'Actual used step is {_actual_step!r}.')
-
-    step = _actual_step
-    epoch = int(math.ceil(step / dataset_size))
-    logging.info(f'Using step {step}, epoch {epoch}.')
-
-    with TemporaryDirectory() as td:
-        models_dir = os.path.join(td, 'models')
-        os.makedirs(models_dir, exist_ok=True)
-
-        lora_file = os.path.basename(hf_fs.glob(f'{repo}/{step}/*.safetensors')[0])
-        pt_file = os.path.basename(hf_fs.glob(f'{repo}/{step}/*.pt')[0])
-        trigger_word = os.path.splitext(lora_file)[0]
-        char_name = ' '.join(trigger_word.split('_')[:-1])
-
-        models = []
-        local_lora_file = os.path.join(models_dir, lora_file)
-        download_file(hf_hub_url(repo, filename=f'{step}/{lora_file}'), local_lora_file)
-        models.append((local_lora_file, lora_file))
-        local_pt_file = os.path.join(models_dir, pt_file)
-        download_file(hf_hub_url(repo, filename=f'{step}/{pt_file}'), local_pt_file)
-        models.append((local_pt_file, pt_file))
-
-        images_dir = os.path.join(td, 'images')
-        os.makedirs(images_dir, exist_ok=True)
-
-        images = []
-        tags_count = {}
-        tags_idx = {}
-        for img_file in hf_fs.glob(f'{repo}/{step}/previews/*.png'):
-            img_filename = os.path.basename(img_file)
-            img_name = os.path.splitext(img_filename)[0]
-            img_info_filename = f'{img_name}_info.txt'
-
-            local_img_file = os.path.join(images_dir, img_filename)
-            download_file(hf_hub_url(repo, filename=f'{step}/previews/{img_filename}'), local_img_file)
-            local_info_file = os.path.join(images_dir, img_info_filename)
-            download_file(hf_hub_url(repo, filename=f'{step}/previews/{img_info_filename}'), local_info_file)
-
-            info = {}
-            with open(local_info_file, 'r', encoding='utf-8') as iif:
-                for line in iif:
-                    line = line.strip()
-                    if line:
-                        info_name, info_text = line.split(':', maxsplit=1)
-                        info[info_name.strip()] = info_text.strip()
-
-            meta = {
-                'cfgScale': int(round(float(info.get('Guidance Scale')))),
-                'negativePrompt': info.get('Neg Prompt'),
-                'prompt': info.get('Prompt'),
-                'sampler': info.get('Sample Method', "Euler a"),
-                'seed': int(info.get('Seed')),
-                'steps': int(info.get('Infer Steps')),
-                'Size': f"{info['Width']}x{info['Height']}",
-            }
-            if info.get('Clip Skip'):
-                meta['clipSkip'] = int(info['Clip Skip'])
-            if info.get('Model'):
-                meta['Model'] = info['Model']
-                pil_img_file = Image.open(local_img_file)
-                if pil_img_file.info.get('parameters'):
-                    png_info_text = pil_img_file.info['parameters']
-                    find_hash = re.findall(r'Model hash:\s*([a-zA-Z\d]+)', png_info_text, re.IGNORECASE)
-                    if find_hash:
-                        model_hash = find_hash[0].lower()
-                        meta['hashes'] = {"model": model_hash}
-                        meta["resources"] = [
-                            {
-                                "hash": model_hash,
-                                "name": info['Model'],
-                                "type": "model"
-                            }
-                        ]
-                        meta["Model hash"] = model_hash
-
-            nsfw = (info.get('Safe For Word', info.get('Safe For Work')) or '').lower() != 'yes'
-            if not nsfw:
-                cls_, score_ = nsfw_pred(local_img_file)
-                if cls_ not in {'hentai', 'porn', 'sexy'} and score_ >= 0.65:
-                    pass
+                    if best_step is not None:
+                        step = best_step
+                    else:
+                        step = meta_json['best_step']
                 else:
-                    nsfw = True
+                    step = max(all_steps)
 
-            if nsfw and not allow_nsfw_images:
-                logging.info(f'Image {local_img_file!r} skipped due to its nsfw.')
-                continue
+        logging.info(f'Expected step is {step!r}.')
+        _, _actual_step = sorted([(abs(s - step), s) for s in all_steps])[0]
+        if _actual_step != step:
+            logging.info(f'Actual used step is {_actual_step!r}.')
 
-            current_feat = ccip_extract_feature(local_img_file)
-            similarity = ccip_batch_same([current_feat, *ccip_feats])[0, 1:].mean()
-            logging.info(f'Similarity of character on image {local_img_file!r}: {similarity!r}')
-            if similarity < 0.6 and not no_ccip_check:
-                logging.info(f'Similarity of {local_img_file!r}({similarity!r}) is too low, skipped.')
-                continue
+        step = _actual_step
+        epoch = int(math.ceil(step / dataset_size))
+        logging.info(f'Using step {step}, epoch {epoch}.')
 
-            if not nsfw or allow_nsfw_images:
-                rating_score = anime_rating_score(local_img_file)
-                safe_v = int(round(rating_score['safe'] * 10))
-                safe_r15 = int(round(rating_score['r15'] * 10))
-                safe_r18 = int(round(rating_score['r18'] * 10))
-                faces = detect_faces(local_img_file)
-                if faces:
-                    if len(faces) > 1:
-                        logging.warning('Multiple face detected, skipped!')
-                        continue
+        with TemporaryDirectory() as td:
+            models_dir = os.path.join(td, 'models')
+            os.makedirs(models_dir, exist_ok=True)
 
-                    (x0, y0, x1, y1), _, _ = faces[0]
-                    width, height = load_image(local_img_file).size
-                    face_area = abs((x1 - x0) * (y1 - y0))
-                    face_ratio = face_area * 1.0 / (width * height)
-                    face_ratio = int(round(face_ratio * 50))
-                else:
-                    logging.warning('No face detected, skipped!')
+            lora_file = os.path.basename(hf_fs.glob(f'{repo}/{step}/*.safetensors')[0])
+            pt_file = os.path.basename(hf_fs.glob(f'{repo}/{step}/*.pt')[0])
+            trigger_word = os.path.splitext(lora_file)[0]
+            char_name = ' '.join(trigger_word.split('_')[:-1])
+
+            models = []
+            local_lora_file = os.path.join(models_dir, lora_file)
+            download_file(hf_hub_url(repo, filename=f'{step}/{lora_file}'), local_lora_file)
+            models.append((local_lora_file, lora_file))
+            local_pt_file = os.path.join(models_dir, pt_file)
+            download_file(hf_hub_url(repo, filename=f'{step}/{pt_file}'), local_pt_file)
+            models.append((local_pt_file, pt_file))
+
+            images_dir = os.path.join(td, 'images')
+            os.makedirs(images_dir, exist_ok=True)
+
+            images = []
+            tags_count = {}
+            tags_idx = {}
+            for img_file in hf_fs.glob(f'{repo}/{step}/previews/*.png'):
+                img_filename = os.path.basename(img_file)
+                img_name = os.path.splitext(img_filename)[0]
+                img_info_filename = f'{img_name}_info.txt'
+
+                local_img_file = os.path.join(images_dir, img_filename)
+                download_file(hf_hub_url(repo, filename=f'{step}/previews/{img_filename}'), local_img_file)
+                local_info_file = os.path.join(images_dir, img_info_filename)
+                download_file(hf_hub_url(repo, filename=f'{step}/previews/{img_info_filename}'), local_info_file)
+
+                info = {}
+                with open(local_info_file, 'r', encoding='utf-8') as iif:
+                    for line in iif:
+                        line = line.strip()
+                        if line:
+                            info_name, info_text = line.split(':', maxsplit=1)
+                            info[info_name.strip()] = info_text.strip()
+
+                meta = {
+                    'cfgScale': int(round(float(info.get('Guidance Scale')))),
+                    'negativePrompt': info.get('Neg Prompt'),
+                    'prompt': info.get('Prompt'),
+                    'sampler': info.get('Sample Method', "Euler a"),
+                    'seed': int(info.get('Seed')),
+                    'steps': int(info.get('Infer Steps')),
+                    'Size': f"{info['Width']}x{info['Height']}",
+                }
+                if info.get('Clip Skip'):
+                    meta['clipSkip'] = int(info['Clip Skip'])
+                if info.get('Model'):
+                    meta['Model'] = info['Model']
+                    pil_img_file = Image.open(local_img_file)
+                    if pil_img_file.info.get('parameters'):
+                        png_info_text = pil_img_file.info['parameters']
+                        find_hash = re.findall(r'Model hash:\s*([a-zA-Z\d]+)', png_info_text, re.IGNORECASE)
+                        if find_hash:
+                            model_hash = find_hash[0].lower()
+                            meta['hashes'] = {"model": model_hash}
+                            meta["resources"] = [
+                                {
+                                    "hash": model_hash,
+                                    "name": info['Model'],
+                                    "type": "model"
+                                }
+                            ]
+                            meta["Model hash"] = model_hash
+
+                nsfw = (info.get('Safe For Word', info.get('Safe For Work')) or '').lower() != 'yes'
+                if not nsfw:
+                    cls_, score_ = nsfw_pred(local_img_file)
+                    if cls_ not in {'hentai', 'porn', 'sexy'} and score_ >= 0.65:
+                        pass
+                    else:
+                        nsfw = True
+
+                if nsfw and not allow_nsfw_images:
+                    logging.info(f'Image {local_img_file!r} skipped due to its nsfw.')
                     continue
 
-                images.append((
-                    (-safe_v, -safe_r15, -safe_r18) if False else 0,
-                    -face_ratio,
-                    1 if nsfw else 0,
-                    0 if img_name.startswith('pattern_') else 1,
-                    img_name,
-                    (local_img_file, img_filename, meta)
-                ))
+                current_feat = ccip_extract_feature(local_img_file)
+                similarity = ccip_batch_same([current_feat, *ccip_feats])[0, 1:].mean()
+                logging.info(f'Similarity of character on image {local_img_file!r}: {similarity!r}')
+                if similarity < 0.6 and not no_ccip_check:
+                    logging.info(f'Similarity of {local_img_file!r}({similarity!r}) is too low, skipped.')
+                    continue
 
-                for ptag in info.get('Prompt').split(','):
-                    ptag = ptag.strip()
-                    tags_count[ptag] = tags_count.get(ptag, 0) + 1
-                    if ptag not in tags_idx:
-                        tags_idx[ptag] = len(tags_idx)
+                if not nsfw or allow_nsfw_images:
+                    rating_score = anime_rating_score(local_img_file)
+                    safe_v = int(round(rating_score['safe'] * 10))
+                    safe_r15 = int(round(rating_score['r15'] * 10))
+                    safe_r18 = int(round(rating_score['r18'] * 10))
+                    faces = detect_faces(local_img_file)
+                    if faces:
+                        if len(faces) > 1:
+                            logging.warning('Multiple face detected, skipped!')
+                            continue
 
-        images = [item[-1] for item in sorted(images)]
-        max_tag_cnt = max(tags_count.values())
-        recommended_tags = sorted([ptag for ptag, cnt in tags_count.items() if cnt == max_tag_cnt],
-                                  key=lambda x: tags_idx[x])
+                        (x0, y0, x1, y1), _, _ = faces[0]
+                        width, height = load_image(local_img_file).size
+                        face_area = abs((x1 - x0) * (y1 - y0))
+                        face_ratio = face_area * 1.0 / (width * height)
+                        face_ratio = int(round(face_ratio * 50))
+                    else:
+                        logging.warning('No face detected, skipped!')
+                        continue
 
-        # publish model
-        session = session or get_civitai_session(timeout=30)
+                    images.append((
+                        (-safe_v, -safe_r15, -safe_r18) if False else 0,
+                        -face_ratio,
+                        1 if nsfw else 0,
+                        0 if img_name.startswith('pattern_') else 1,
+                        img_name,
+                        (local_img_file, img_filename, meta)
+                    ))
 
-        model_desc_default = f"""
-        * Thanks to Civitai's TOS, some images cannot be uploaded. **THE FULL PREVIEW IMAGES CAN BE FOUND ON [HUGGINGFACE](https://huggingface.co/{repo})**.
-        * **<span style="color:#fa5252">THIS MODEL HAS TWO FILES. YOU NEED TO USE THEM TOGETHER!!!</span>**
-        * **The associated trigger words are only for reference, it may need to be adjusted at some times**.
-        * Recommended weight of pt file is 0.5-1.0, weight of LoRA is 0.5-0.85. 
-        * Images were generated using a few fixed prompts and dataset-based clustered prompts. Random seeds were used, ruling out cherry-picking. **What you see here is what you can get.**
-        * No specialized training was done for outfits. You can check our provided preview post to get the prompts corresponding to the outfits.
-        * This model is trained with **{plural_word(dataset_size, "image")}**.
+                    for ptag in info.get('Prompt').split(','):
+                        ptag = ptag.strip()
+                        tags_count[ptag] = tags_count.get(ptag, 0) + 1
+                        if ptag not in tags_idx:
+                            tags_idx[ptag] = len(tags_idx)
 
-        ## How to Use This Model
+            images = [item[-1] for item in sorted(images)]
+            max_tag_cnt = max(tags_count.values())
+            recommended_tags = sorted([ptag for ptag, cnt in tags_count.items() if cnt == max_tag_cnt],
+                                      key=lambda x: tags_idx[x])
 
-        **<span style="color:#fa5252">THIS MODEL HAS TWO FILES. YOU NEED TO USE THEM TOGETHER!!!</span>**. 
-        In this case, you need to download both `{pt_file}` and 
-        `{lora_file}`, then **use `{pt_file}` as texture inversion embedding, and use
-        `{lora_file}` as LoRA at the same time**.
+            # publish model
+            session = session or get_civitai_session(timeout=30)
 
-        **<span style="color:#fa5252">このモデルには2つのファイルがあります。一緒に使う必要があります！！！</span>**。
-        この場合、`{pt_file}`と`{lora_file}`の両方をダウンロード
-        する必要があります。`{pt_file}`をテクスチャ反転埋め込みとして使用し、同時に`{lora_file}`をLoRAとして使用してください。
+            model_desc_default = f"""
+            * Thanks to Civitai's TOS, some images cannot be uploaded. **THE FULL PREVIEW IMAGES CAN BE FOUND ON [HUGGINGFACE](https://huggingface.co/{repo})**.
+            * **<span style="color:#fa5252">THIS MODEL HAS TWO FILES. YOU NEED TO USE THEM TOGETHER!!!</span>**
+            * **The associated trigger words are only for reference, it may need to be adjusted at some times**.
+            * Recommended weight of pt file is 0.5-1.0, weight of LoRA is 0.5-0.85. 
+            * Images were generated using a few fixed prompts and dataset-based clustered prompts. Random seeds were used, ruling out cherry-picking. **What you see here is what you can get.**
+            * No specialized training was done for outfits. You can check our provided preview post to get the prompts corresponding to the outfits.
+            * This model is trained with **{plural_word(dataset_size, "image")}**.
 
-        **<span style="color:#fa5252">这个模型有两个文件。你需要同时使用它们！！！</span>**。
-        在这种情况下，您需要下载`{pt_file}`和`{lora_file}`这两个文件，然后将`{pt_file}`用作纹理反转嵌入，
-        同时使用`{lora_file}`作为LoRA。
+            ## How to Use This Model
 
-        **<span style="color:#fa5252">이 모델은 두 개의 파일이 있습니다. 두 파일을 함께 사용해야 합니다!!!</span>**. 
-        이 경우에는 `{pt_file}`와 `{lora_file}` 두 파일을 모두 다운로드하신 다음에 **`{pt_file}`을 텍스처 반전 임베딩으로 사용하고, 
-        동시에 `{lora_file}`을 LoRA로 사용하셔야 합니다**.
+            **<span style="color:#fa5252">THIS MODEL HAS TWO FILES. YOU NEED TO USE THEM TOGETHER!!!</span>**. 
+            In this case, you need to download both `{pt_file}` and 
+            `{lora_file}`, then **use `{pt_file}` as texture inversion embedding, and use
+            `{lora_file}` as LoRA at the same time**.
 
-        (Translated with ChatGPT)
+            **<span style="color:#fa5252">このモデルには2つのファイルがあります。一緒に使う必要があります！！！</span>**。
+            この場合、`{pt_file}`と`{lora_file}`の両方をダウンロード
+            する必要があります。`{pt_file}`をテクスチャ反転埋め込みとして使用し、同時に`{lora_file}`をLoRAとして使用してください。
 
-        The trigger word is `{trigger_word}`, and the recommended tags are `{', '.join(recommended_tags)}`.
+            **<span style="color:#fa5252">这个模型有两个文件。你需要同时使用它们！！！</span>**。
+            在这种情况下，您需要下载`{pt_file}`和`{lora_file}`这两个文件，然后将`{pt_file}`用作纹理反转嵌入，
+            同时使用`{lora_file}`作为LoRA。
 
-        ## How This Model Is Trained
+            **<span style="color:#fa5252">이 모델은 두 개의 파일이 있습니다. 두 파일을 함께 사용해야 합니다!!!</span>**. 
+            이 경우에는 `{pt_file}`와 `{lora_file}` 두 파일을 모두 다운로드하신 다음에 **`{pt_file}`을 텍스처 반전 임베딩으로 사용하고, 
+            동시에 `{lora_file}`을 LoRA로 사용하셔야 합니다**.
 
-        This model is trained with [HCP-Diffusion](https://github.com/7eu7d7/HCP-Diffusion). 
-        And the auto-training framework is maintained by [DeepGHS Team](https://huggingface.co/deepghs).
-        And the WebUI Panel provid by [LittleAppleWebUI](https://github.com/LittleApple-fp16/LittleAppleWebUI)
+            (Translated with ChatGPT)
 
-        ## Why Some Preview Images Not Look Like {" ".join(map(str.capitalize, trigger_word.split("_")))}
+            The trigger word is `{trigger_word}`, and the recommended tags are `{', '.join(recommended_tags)}`.
 
-        **All the prompt texts** used on the preview images (which can be viewed by clicking on the images) 
-        **are automatically generated using clustering algorithms** based on feature information extracted from the 
-        training dataset. The seed used during image generation is also randomly generated, and the images have 
-        not undergone any selection or modification. As a result, there is a possibility of the mentioned 
-        issues occurring.
+            ## How This Model Is Trained
 
-        In practice, based on our internal testing, most models that experience such issues perform better in 
-        actual usage than what is seen in the preview images. **The only thing you may need to do is adjusting 
-        the tags you are using**.
+            This model is trained with [HCP-Diffusion](https://github.com/7eu7d7/HCP-Diffusion). 
+            And the auto-training framework is maintained by [DeepGHS Team](https://huggingface.co/deepghs).
+            And the WebUI Panel provid by [LittleAppleWebUI](https://github.com/LittleApple-fp16/LittleAppleWebUI)
 
-        ## I Felt This Model May Be Overfitting or Underfitting, What Shall I Do
+            ## Why Some Preview Images Not Look Like {" ".join(map(str.capitalize, trigger_word.split("_")))}
 
-        Our model has been published on [huggingface repository - {repo}](https://huggingface.co/{repo}), where
-        models of all the steps are saved. Also, we published the training dataset on 
-        [huggingface dataset - {repo}](https://huggingface.co/datasets/{repo}), which may be helpful to you.
+            **All the prompt texts** used on the preview images (which can be viewed by clicking on the images) 
+            **are automatically generated using clustering algorithms** based on feature information extracted from the 
+            training dataset. The seed used during image generation is also randomly generated, and the images have 
+            not undergone any selection or modification. As a result, there is a possibility of the mentioned 
+            issues occurring.
 
-        ## Why Not Just Using The Better-Selected Images
+            In practice, based on our internal testing, most models that experience such issues perform better in 
+            actual usage than what is seen in the preview images. **The only thing you may need to do is adjusting 
+            the tags you are using**.
 
-        Our model's entire process, from data crawling, training, to generating preview images and publishing, 
-        is **100% automated without any human intervention**. It's an interesting experiment conducted by our team, 
-        and for this purpose, we have developed a complete set of software infrastructure, including data filtering, 
-        automatic training, and automated publishing. Therefore, if possible, we would appreciate more feedback or 
-        suggestions as they are highly valuable to us.
+            ## I Felt This Model May Be Overfitting or Underfitting, What Shall I Do
 
-        ## Why Can't the Desired Character Outfits Be Accurately Generated
+            Our model has been published on [huggingface repository - {repo}](https://huggingface.co/{repo}), where
+            models of all the steps are saved. Also, we published the training dataset on 
+            [huggingface dataset - {repo}](https://huggingface.co/datasets/{repo}), which may be helpful to you.
 
-        Our current training data is sourced from various image websites, and for a fully automated pipeline, 
-        it's challenging to accurately predict which official images a character possesses. 
-        Consequently, outfit generation relies on clustering based on labels from the training dataset 
-        in an attempt to achieve the best possible recreation. We will continue to address this issue and attempt 
-        optimization, but it remains a challenge that cannot be completely resolved. The accuracy of outfit 
-        recreation is also unlikely to match the level achieved by manually trained models.
+            ## Why Not Just Using The Better-Selected Images
 
-        In fact, this model's greatest strengths lie in recreating the inherent characteristics of the characters 
-        themselves and its relatively strong generalization capabilities, owing to its larger dataset. 
-        As such, **this model is well-suited for tasks such as changing outfits, posing characters, and, 
-        of course, generating NSFW images of characters!**😉".
-        
-        For the following groups, it is not recommended to use this model and we express regret:
+            Our model's entire process, from data crawling, training, to generating preview images and publishing, 
+            is **100% automated without any human intervention**. It's an interesting experiment conducted by our team, 
+            and for this purpose, we have developed a complete set of software infrastructure, including data filtering, 
+            automatic training, and automated publishing. Therefore, if possible, we would appreciate more feedback or 
+            suggestions as they are highly valuable to us.
 
-        1. Individuals who cannot tolerate any deviations from the original character design, even in the slightest detail.
-        2. Individuals who are facing the application scenarios with high demands for accuracy in recreating character outfits.
-        3. Individuals who cannot accept the potential randomness in AI-generated images based on the Stable Diffusion algorithm.
-        4. Individuals who are not comfortable with the fully automated process of training character models using LoRA, or those who believe that training character models must be done purely through manual operations to avoid disrespecting the characters.
-        5. Individuals who finds the generated image content offensive to their values.
-        """
-        model_name = model_name or try_find_title(char_name, game_name) or \
-                     try_get_title_from_repo(repo) or trigger_word.replace('_', ' ')
-        if not force_create_model:
-            try:
-                exist_model = civitai_find_online(model_name, creator='narugo1992')
-            except ModelNotFound:
-                model_id = None
-            else:
-                logging.info(f'Existing model {exist_model.model_name}({exist_model.model_id}) found.')
-                model_id = exist_model.model_id
-        else:
+            ## Why Can't the Desired Character Outfits Be Accurately Generated
+
+            Our current training data is sourced from various image websites, and for a fully automated pipeline, 
+            it's challenging to accurately predict which official images a character possesses. 
+            Consequently, outfit generation relies on clustering based on labels from the training dataset 
+            in an attempt to achieve the best possible recreation. We will continue to address this issue and attempt 
+            optimization, but it remains a challenge that cannot be completely resolved. The accuracy of outfit 
+            recreation is also unlikely to match the level achieved by manually trained models.
+
+            In fact, this model's greatest strengths lie in recreating the inherent characteristics of the characters 
+            themselves and its relatively strong generalization capabilities, owing to its larger dataset. 
+            As such, **this model is well-suited for tasks such as changing outfits, posing characters, and, 
+            of course, generating NSFW images of characters!**😉".
+
+            For the following groups, it is not recommended to use this model and we express regret:
+
+            1. Individuals who cannot tolerate any deviations from the original character design, even in the slightest detail.
+            2. Individuals who are facing the application scenarios with high demands for accuracy in recreating character outfits.
+            3. Individuals who cannot accept the potential randomness in AI-generated images based on the Stable Diffusion algorithm.
+            4. Individuals who are not comfortable with the fully automated process of training character models using LoRA, or those who believe that training character models must be done purely through manual operations to avoid disrespecting the characters.
+            5. Individuals who finds the generated image content offensive to their values.
+            6. Individuals who feel that writing a WebUI is meaningless or impatient.
+            """
+            model_name = model_name or try_find_title(char_name, game_name) or \
+                         try_get_title_from_repo(repo) or trigger_word.replace('_', ' ')
+            # if not force_create_model:
+            #     try:
+            #         exist_model = civitai_find_online(model_name, creator='narugo1992')
+            #     except ModelNotFound:
+            #         model_id = None
+            #     else:
+            #         logging.info(f'Existing model {exist_model.model_name}({exist_model.model_id}) found.')
+            #         model_id = exist_model.model_id
+            # else:
+            #     model_id = None
             model_id = None
 
-        model_id, _ = civitai_upsert_model(
-            name=model_name,
-            description_md=model_desc_md or model_desc_default,
-            tags=[
-                game_name, f"{game_name} {char_name}", char_name,
-                'female', 'girl', 'character', 'fully-automated',
-                *map(_tag_decode, core_tags.keys()),
-            ],
-            exist_model_id=model_id,
-            session=session,
-        )
+            model_id, _ = civitai_upsert_model(
+                name=model_name,
+                description_md=model_desc_md or model_desc_default,
+                tags=[
+                    game_name, f"{game_name} {char_name}", char_name,
+                    'female', 'girl', 'character', 'fully-automated',
+                    *map(_tag_decode, core_tags.keys()),
+                ],
+                exist_model_id=model_id,
+                session=session,
+            )
 
-        version_data = civitai_create_version(
-            model_id=model_id,
-            version_name=version_name,
-            description_md=version_desc_md or '',
-            trigger_words=[
-                trigger_word,
-                repr_tags([key for key, _ in sorted(core_tags.items(), key=lambda x: -x[1])]),
-            ],
-            session=session,
-            steps=step,
-            epochs=epoch,
-        )
-        version_id = version_data['id']
+            version_data = civitai_create_version(
+                model_id=model_id,
+                version_name=version_name,
+                description_md=version_desc_md or '',
+                trigger_words=[
+                    trigger_word,
+                    repr_tags([key for key, _ in sorted(core_tags.items(), key=lambda x: -x[1])]),
+                ],
+                session=session,
+                steps=step,
+                epochs=epoch,
+            )
+            version_id = version_data['id']
 
-        civitai_upload_models(
-            model_version_id=version_id,
-            model_files=models,
-            model_id=model_id,
-            session=session,
-        )
-        civitai_upload_images(
-            model_version_id=version_id,
-            image_files=images,
-            tags=[
-                game_name, f"{game_name} {char_name}", char_name,
-                'female', 'girl', 'character', 'fully-automated', 'random prompt', 'random seed',
-                *map(_tag_decode, core_tags.keys()),
-            ],
-            model_id=model_id,
-            session=session,
-        )
+            civitai_upload_models(
+                model_version_id=version_id,
+                model_files=models,
+                model_id=model_id,
+                session=session,
+            )
+            civitai_upload_images(
+                model_version_id=version_id,
+                image_files=images,
+                tags=[
+                    game_name, f"{game_name} {char_name}", char_name,
+                    'female', 'girl', 'character', 'fully-automated', 'random prompt', 'random seed',
+                    *map(_tag_decode, core_tags.keys()),
+                ],
+                model_id=model_id,
+                session=session,
+            )
 
-        if draft:
-            logging.info(f'Draft of model {model_id!r} created.')
+            if draft:
+                logging.info(f'Draft of model {model_id!r} created.')
+            else:
+                civiti_publish(model_id, version_id, publish_at, session)
+            return civitai_get_model_info(model_id, session)['id']
+    else:
+        # kohya
+        ch_name = source.split("AppleHarem/")[1]
+        all_epochs = meta_json['epochs']
+        logging.info(f'Available epochs: {all_epochs!r}.')
+        if 'best_epoch' in meta_json:
+            best_epoch, best_score = None, None
+            for score_item in meta_json['scores']:
+                if best_epoch is None or \
+                        (score_item['score'] >= best_score):
+                    best_epoch, best_score = score_item['epoch'], score_item['score']
+            if best_epoch is not None:
+                b_epoch = best_epoch
+            else:
+                b_epoch = meta_json['best_epoch']
         else:
-            civiti_publish(model_id, version_id, publish_at, session)
-        return civitai_get_model_info(model_id, session)['id']
+            b_epoch = max(all_epochs)
+        step = int(dataset_size * b_epoch)
+        with TemporaryDirectory() as td:
+            models_dir = os.path.join(td, 'models')
+            os.makedirs(models_dir, exist_ok=True)
+            models = []
+            lora_file = os.path.basename(hf_fs.glob(f'{repo}/{b_epoch}/*.safetensors')[0])
+            local_lora_file = os.path.join(models_dir, lora_file)
+            download_file(hf_hub_url(repo, filename=f'{lora_file}'), local_lora_file)
+            models.append((local_lora_file, lora_file))
+            images_dir = os.path.join(td, 'images')
+            os.makedirs(images_dir, exist_ok=True)
+            # local_img_file = os.path.join(images_dir, ch_name + '.png')
+            images = []
+            tags_count = {}
+            tags_idx = {}
+            for img_file in hf_fs.glob(f'{repo}/{b_epoch}/previews/*.png'):
+                img_filename = os.path.basename(img_file)
+                img_name = os.path.splitext(img_filename)[0]
+                img_info_filename = f'{img_name}_info.txt'
+
+                local_img_file = os.path.join(images_dir, img_filename)
+                download_file(hf_hub_url(repo, filename=f'{b_epoch}/previews/{img_filename}'), local_img_file)
+                local_info_file = os.path.join(images_dir, img_info_filename)
+                download_file(hf_hub_url(repo, filename=f'{b_epoch}/previews/{img_info_filename}'), local_info_file)
+
+                info = {}
+                with open(local_info_file, 'r', encoding='utf-8') as iif:
+                    for line in iif:
+                        line = line.strip()
+                        if line:
+                            info_name, info_text = line.split(':', maxsplit=1)
+                            info[info_name.strip()] = info_text.strip()
+
+                meta = {
+                    'cfgScale': int(round(float(info.get('Guidance Scale')))),
+                    'negativePrompt': info.get('Neg Prompt'),
+                    'prompt': info.get('Prompt'),
+                    'sampler': info.get('Sample Method', "Euler a"),
+                    'seed': int(info.get('Seed')),
+                    'steps': int(info.get('Infer Steps')),
+                    'Size': f"{info['Width']}x{info['Height']}",
+                }
+                if info.get('Clip Skip'):
+                    meta['clipSkip'] = int(info['Clip Skip'])
+                if info.get('Model'):
+                    meta['Model'] = info['Model']
+                    pil_img_file = Image.open(local_img_file)
+                    if pil_img_file.info.get('parameters'):
+                        png_info_text = pil_img_file.info['parameters']
+                        find_hash = re.findall(r'Model hash:\s*([a-zA-Z\d]+)', png_info_text, re.IGNORECASE)
+                        if find_hash:
+                            model_hash = find_hash[0].lower()
+                            meta['hashes'] = {"model": model_hash}
+                            meta["resources"] = [
+                                {
+                                    "hash": model_hash,
+                                    "name": info['Model'],
+                                    "type": "model"
+                                }
+                            ]
+                            meta["Model hash"] = model_hash
+
+                nsfw = (info.get('Safe For Word', info.get('Safe For Work')) or '').lower() != 'yes'
+                if not nsfw:
+                    cls_, score_ = nsfw_pred(local_img_file)
+                    if cls_ not in {'hentai', 'porn', 'sexy'} and score_ >= 0.65:
+                        pass
+                    else:
+                        nsfw = True
+
+                if nsfw and not allow_nsfw_images:
+                    logging.info(f'Image {local_img_file!r} skipped due to its nsfw.')
+                    continue
+
+                current_feat = ccip_extract_feature(local_img_file)
+                similarity = ccip_batch_same([current_feat, *ccip_feats])[0, 1:].mean()
+                logging.info(f'Similarity of character on image {local_img_file!r}: {similarity!r}')
+                if similarity < 0.6 and not no_ccip_check:
+                    logging.info(f'Similarity of {local_img_file!r}({similarity!r}) is too low, skipped.')
+                    continue
+
+                if not nsfw or allow_nsfw_images:
+                    rating_score = anime_rating_score(local_img_file)
+                    safe_v = int(round(rating_score['safe'] * 10))
+                    safe_r15 = int(round(rating_score['r15'] * 10))
+                    safe_r18 = int(round(rating_score['r18'] * 10))
+                    faces = detect_faces(local_img_file)
+                    if faces:
+                        if len(faces) > 1:
+                            logging.warning('Multiple face detected, skipped!')
+                            continue
+
+                        (x0, y0, x1, y1), _, _ = faces[0]
+                        width, height = load_image(local_img_file).size
+                        face_area = abs((x1 - x0) * (y1 - y0))
+                        face_ratio = face_area * 1.0 / (width * height)
+                        face_ratio = int(round(face_ratio * 50))
+                    else:
+                        logging.warning('No face detected, skipped!')
+                        continue
+
+                    images.append((
+                        (-safe_v, -safe_r15, -safe_r18) if False else 0,
+                        -face_ratio,
+                        1 if nsfw else 0,
+                        0 if img_name.startswith('pattern_') else 1,
+                        img_name,
+                        (local_img_file, img_filename, meta)
+                    ))
+
+                    for ptag in info.get('Prompt').split(','):
+                        ptag = ptag.strip()
+                        tags_count[ptag] = tags_count.get(ptag, 0) + 1
+                        if ptag not in tags_idx:
+                            tags_idx[ptag] = len(tags_idx)
+
+            images = [item[-1] for item in sorted(images)]
+            max_tag_cnt = max(tags_count.values())
+            recommended_tags = sorted([ptag for ptag, cnt in tags_count.items() if cnt == max_tag_cnt],
+                                      key=lambda x: tags_idx[x])
+            trigger_word = os.path.splitext(lora_file)[0]
+            char_name = ' '.join(trigger_word.split('_')[:-1])
+            session = session or get_civitai_session(timeout=30)
+
+            model_desc_default = f"""
+                        * **YOU CAN ALSO FIND THIS MODEL ON HUGGINGFACE [HUGGINGFACE](https://huggingface.co/{repo})**.
+                        * **<span style="color:#52fa72">THIS MODEL HAS ONE FILE. ENJOY IT.</span>**
+                        * **If you see this line, the model usually not include trigger words**.
+                        * Recommended weight is 0.5-0.85. 
+                        * Images were generated using a few fixed prompts and dataset-based clustered prompts(TODO). Random seeds were used, ruling out cherry-picking. **What you see here is what you can get.**
+                        * No specialized training was done for outfits. You can check our provided preview post to get the prompts corresponding to the outfits.
+
+                        ## How to Use This Model
+
+                        **<span style="color:#52fa72">THIS MODEL HAS ONE FILE. ENJOY IT.</span>**. 
+                        In this case, you just need to download `{lora_file}`.
+
+                        **<span style="color:#52fa72">このフォルダにはファイルが1つあります。それらを楽しんでください</span>**。
+                        この場合、ダウンロード`{lora_file}`できます。
+
+                        **<span style="color:#52fa72">这个模型有一个文件。玩的开心。</span>**。
+                        在这种情况下，您只需下载`{lora_file}`这个文件。
+
+                        **<span style="color:#52fa72">이 모델은 파일이 하나 있습니다. 즐기세요.</span>**. 
+                        이 경우, {lora_file}을 다운로드하시면 됩니다.
+
+                        (Translated with ChatGPT)
+
+                        ## How This Model Is Trained
+
+                        This model is trained with [kohya-ss' sd-script](https://github.com/kohya-ss/sd-scripts). 
+                        And the auto-training framework is maintained by [DeepGHS Team](https://huggingface.co/deepghs).
+                        And the WebUI Panel provid by [LittleAppleWebUI](https://github.com/LittleApple-fp16/LittleAppleWebUI)
+
+                        ## Why Some Preview Images Not Look Like {" ".join(map(str.capitalize, trigger_word.split("_")))}
+
+                        Our kohya training process only uses **auto fill parameters**, so you should contact the author of the parameters.
+
+                        **You may need to do is adjusting the tags you are using, or give up.**.
+
+                        ## I Felt This Model May Be Overfitting or Underfitting, What Shall I Do
+
+                        Our model has been published on [huggingface repository - {repo}](https://huggingface.co/{repo}), where
+                        models of all the epochs are saved. Also, we published the training dataset on 
+                        [huggingface dataset - {repo}](https://huggingface.co/datasets/{repo}), which may be helpful to you.
+
+
+                        This model's greatest strengths lie in recreating the inherent characteristics of the characters 
+                        themselves and its relatively strong generalization capabilities, owing to its larger dataset. 
+                        As such, **this model is well-suited for tasks such as changing outfits, posing characters, and, 
+                        of course, generating NSFW images of characters!**🤬".
+
+                        For the following groups, it is not recommended to use this model and we express regret:
+
+                        1. Individuals who cannot tolerate any deviations from the original character design, even in the slightest detail.
+                        2. Individuals who are facing the application scenarios with high demands for accuracy in recreating character outfits.
+                        3. Individuals who cannot accept the potential randomness in AI-generated images based on the Stable Diffusion algorithm.
+                        4. Individuals who are not comfortable with the fully automated process of training character models using LoRA, or those who believe that training character models must be done purely through manual operations to avoid disrespecting the characters.
+                        5. Individuals who finds the generated image content offensive to their values.
+                        6. Individuals who feel that writing a WebUI is meaningless or impatient.
+                        """
+            model_name = model_name or try_get_title_from_repo(repo)
+            model_id = None
+            char_name = ch_name
+            model_id, _ = civitai_upsert_model(
+                name=model_name,
+                description_md=model_desc_md or model_desc_default,
+                tags=[
+                    f"{game_name} {char_name}", char_name,
+                    'female', 'girl', 'character', 'anime',
+                    *map(_tag_decode, core_tags.keys()),
+                ],
+                exist_model_id=model_id,
+                session=session,
+            )
+
+            version_data = civitai_create_version(
+                model_id=model_id,
+                version_name=version_name,
+                description_md=version_desc_md or '',
+                trigger_words=[
+                    trigger_word,
+                    repr_tags([key for key, _ in sorted(core_tags.items(), key=lambda x: -x[1])]),
+                ],
+                session=session,
+                steps=step,
+                epochs=epoch,
+            )
+            version_id = version_data['id']
+
+            civitai_upload_models(
+                model_version_id=version_id,
+                model_files=models,
+                model_id=model_id,
+                session=session,
+            )
+            civitai_upload_images(
+                model_version_id=version_id,
+                image_files=images,
+                tags=[
+                    game_name, f"{game_name} {char_name}", char_name,
+                    'female', 'girl', 'character', 'fully-automated', 'random prompt', 'random seed',
+                    *map(_tag_decode, core_tags.keys()),
+                ],
+                model_id=model_id,
+                session=session,
+            )
+
+            if draft:
+                logging.info(f'Draft of model {model_id!r} created.')
+            else:
+                civiti_publish(model_id, version_id, publish_at, session)
+            return civitai_get_model_info(model_id, session)['id']
+
+
 
 
 def get_draft_models(session=None):

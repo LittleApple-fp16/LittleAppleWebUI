@@ -1,12 +1,14 @@
 import json
 import logging
 import os.path
+import re
 import shutil
 import time
 import zipfile
 from textwrap import dedent
 from typing import Optional
 from pathlib import Path
+import glob
 
 import numpy as np
 import pandas as pd
@@ -239,19 +241,20 @@ def export_workdir(workdir: str, export_dir: str, n_repeats: int = 2,
             print('', file=f)
 
             print(dedent(f"""
-    **The best step we recommend is {best_step}**, with the score of {all_scores[best_step]:.3f}. The trigger words are:
-    1. `{name}`
-    2. `{repr_tags([key for key, _ in sorted(core_tags.items(), key=lambda x: -x[1])])}`
+                            **The best step we recommend is {best_step}**, with the score of {all_scores[best_step]:.3f}. The trigger words are:
+                            1. `{name}`
+                            2. `{repr_tags([key for key, _ in sorted(core_tags.items(), key=lambda x: -x[1])])}`
             """).strip(), file=f)
             print('', file=f)
 
             print(dedent("""
-    For the following groups, it is not recommended to use this model and we express regret:
-    1. Individuals who cannot tolerate any deviations from the original character design, even in the slightest detail.
-    2. Individuals who are facing the application scenarios with high demands for accuracy in recreating character outfits.
-    3. Individuals who cannot accept the potential randomness in AI-generated images based on the Stable Diffusion algorithm.
-    4. Individuals who are not comfortable with the fully automated process of training character models using LoRA, or those who believe that training character models must be done purely through manual operations to avoid disrespecting the characters.
-    5. Individuals who finds the generated image content offensive to their values.
+                For the following groups, it is not recommended to use this model and we express regret:
+                1. Individuals who cannot tolerate any deviations from the original character design, even in the slightest detail.
+                2. Individuals who are facing the application scenarios with high demands for accuracy in recreating character outfits.
+                3. Individuals who cannot accept the potential randomness in AI-generated images based on the Stable Diffusion algorithm.
+                4. Individuals who are not comfortable with the fully automated process of training character models using LoRA, or those who believe that training character models must be done purely through manual operations to avoid disrespecting the characters.
+                5. Individuals who finds the generated image content offensive to their values.
+                6. Individuals who feel that writing a WebUI is meaningless or impatient.
             """).strip(), file=f)
             print('', file=f)
 
@@ -300,38 +303,71 @@ def export_workdir(workdir: str, export_dir: str, n_repeats: int = 2,
             ds_feats = []
             for item in tqdm(list(ds_source), desc='Extract Dataset Feature'):
                 ds_feats.append(ccip_extract_feature(item.image))
-        preview_dir = os.path.join(export_dir, 'previews')
-        os.makedirs(preview_dir, exist_ok=True)
 
-        while True:
-            try:
-                # draw
-                drawing = draw_with_workdir_kohya(
-                    workdir,
-                    pretrained_model=pretrained_model,
-                    width=image_width, height=image_height, infer_steps=infer_steps,
-                    lora_alpha=lora_alpha, clip_skip=clip_skip, sample_method=sample_method,
-                    model_hash=model_hash,
-                )
-            except RuntimeError:
-                n_repeats += 1
-            else:
-                break
         image_feats = []
-        img_file = os.path.join(preview_dir, f'{drawing.name}.png')
-        image_feats.append(ccip_extract_feature(drawing.image))
-        drawing.image.save(img_file, pnginfo=drawing.pnginfo)
-        same_matrix = ccip_batch_same([*image_feats, *ds_feats])
-        score = same_matrix[:len(image_feats), len(image_feats):].mean()
-        lst_scores = score
-        shutil.copyfile(os.path.join(workdir, os.path.basename(workdir)) + '.safetensors', os.path.join(export_dir, os.path.basename(workdir)) + '.safetensors')
+        d_names = set()
+        nsfw_count = {}
+        all_scores = {}
+        all_scores_lst = []
+        all_drawings = {}
+        epochs = []
+        for file_path in os.path.join(workdir, '*.safetensors'):
+            drawings = draw_with_workdir_kohya(
+                        workdir, lora_path=file_path,
+                        pretrained_model=pretrained_model,
+                        width=image_width, height=image_height, infer_steps=infer_steps,
+                        lora_alpha=lora_alpha, clip_skip=clip_skip, sample_method=sample_method,
+                        model_hash=model_hash,
+                    )
+            match = re.search(r'-(\d+)', os.path.basename(file_path))
+            if match:
+                epoch = match.group(1)
+                epochs.append(int(epoch))
+                epochs.sort()
+            else:
+                epochs.sort()
+                # 最大epoch加增量
+                epoch = (epochs[-1] + max(set([j - i for i, j in zip(epochs[:-1], epochs[1:])]), key=[j - i for i, j in zip(epochs[:-1], epochs[1:])].count))
+            epoch_dir = os.path.join(export_dir, f'{epoch}')
+            preview_dir = os.path.join(epoch_dir, 'previews')
+            os.makedirs(preview_dir, exist_ok=True)
+            os.makedirs(epoch_dir, exist_ok=True)
+            shutil.copyfile(file_path, os.path.join(epoch_dir, os.path.basename(file_path)))
+            logging.info(f'Exporting for {name}-{epoch} ...')
+            for draw in drawings:
+                img_file = os.path.join(preview_dir, f'{draw.name}.png')
+                image_feats.append(ccip_extract_feature(draw.image))
+                draw.image.save(img_file, pnginfo=draw.pnginfo)
+                with open(os.path.join(preview_dir, f'{draw.name}_info.txt'), 'w', encoding='utf-8') as f:
+                    print(draw.preview_info, file=f)
+                d_names.add(draw.name)
+                all_drawings[(draw.name, epoch)] = draw
+                if not draw.sfw:
+                    nsfw_count[draw.name] = nsfw_count.get(draw.name, 0) + 1
+            same_matrix = ccip_batch_same([*image_feats, *ds_feats])
+            score = same_matrix[:len(image_feats), len(image_feats):].mean()
+            all_scores[int(epoch)] = score
+            all_scores_lst.append(score)
+
+        lst_scores = np.array(all_scores_lst)
+        lst_epochs = np.array(epochs)
+        best_idx = np.argmax(lst_scores)
+        best_epoch = lst_epochs[best_idx].item()
+        nsfw_ratio = {name: count * 1.0 / len(epochs) for name, count in nsfw_count.items()}
         with open(os.path.join(export_dir, 'meta.json'), 'w', encoding='utf-8') as f:
             json.dump({
                 'name': name,
+                'epochs': epochs,
                 'mark': EXPORT_MARK,
                 'time': time.time(),
                 'dataset': dataset_info,
-                'score': score,
+                'scores': [
+                    {
+                        'epoch': epoch,
+                        'score': score,
+                    } for epoch, score in sorted(all_scores.items())
+                ],
+                'best_epoch' : best_epoch
             }, f, ensure_ascii=False, indent=4)
         with open(os.path.join(export_dir, '.gitattributes'), 'w', encoding='utf-8') as f:
             print(_GITLFS, file=f)
@@ -368,3 +404,34 @@ def export_workdir(workdir: str, export_dir: str, n_repeats: int = 2,
         6. Individuals who feel that writing a WebUI is meaningless or impatient.
                 """).strip(), file=f)
             print('', file=f)
+
+
+        print(f'These are available steps:', file=f)
+        print('', file=f)
+
+        d_names = sort_draw_names(list(d_names))
+        columns = ['Steps', 'Score', 'Download', *d_names]
+        t_data = []
+
+        for epoch in epochs[::-1]:
+            d_mds = []
+            for dname in d_names:
+                file = Path(os.path.join(str(epoch), 'previews', f'{dname}.png')).as_posix()
+                if (dname, epoch) in all_drawings:
+                    if nsfw_ratio.get(dname, 0.0) < 0.35:
+                        d_mds.append(f'![{dname}-{epoch}]({file})')
+                    else:
+                        d_mds.append(f'[<NSFW, click to see>]({file})')
+                else:
+                    d_mds.append('')
+
+            t_data.append((
+                str(epoch) if epoch != best_epoch else f'**{epoch}**',
+                f'{all_scores[epoch]:.3f}' if epoch != best_epoch else f'**{all_scores[epoch]:.3f}**',
+                f'[Download]({epoch}/{name}.zip)' if epoch != best_epoch else f'[**Download**]({epoch}/{name}.zip)',
+                *d_mds,
+            ))
+
+        df = pd.DataFrame(columns=columns, data=t_data)
+        print(df.to_markdown(index=False), file=f)
+        print('', file=f)

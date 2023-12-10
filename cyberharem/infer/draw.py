@@ -260,41 +260,62 @@ def draw_with_workdir(
     return retval
 
 
-def draw_with_workdir_kohya(workdir: str, pretrained_model: str = _DEFAULT_INFER_MODEL,
+def draw_with_workdir_kohya(workdir: str, lora_path: str, pretrained_model: str = _DEFAULT_INFER_MODEL,
         width: int = 512, height: int = 768, gscale: float = 8, infer_steps: int = 30,
         lora_alpha: float = 0.85, output_dir: str = None, kohya_cfg_file = _KOHYA_INFER_CFG_FILE,
         clip_skip: int = 2, sample_method: str = 'DPM++ 2M Karras', model_hash: Optional[str] = None):
         logging.info("Start drawing with kohya...")
         from kohya import gen_img_diffusers
-        with TemporaryDirectory() as td:
-            from omegaconf import OmegaConf
-            _tmp_output_dir = output_dir or td
-            args = {
-                'ckpt': pretrained_model,
-                'prompt': f'masterpiece, best quality, highres, game cg, 1girl, solo, {os.path.basename(workdir)}, {{night}}, {{starry sky}}, beach, beautiful detailed sky, bangs, looking_at_viewer, bare_shoulders, hair_between_eyes, cleavage, {{standing}}, looking at viewer, {{bikini:1.3}}, light smile',
-                'network_weights': [os.path.join(workdir, os.path.basename(workdir))+'.safetensors'],
-                'network_mul': [lora_alpha],
-                'outdir': _tmp_output_dir,
-                'clip_skip': clip_skip,
-                'sampler': 'euler',
-            }
-            cfgs = OmegaConf.merge(OmegaConf.load(kohya_cfg_file), args)
-            # args = data_to_cli_args(args)
-            # cfgs = load_config_with_cli(kohya_cfg_file, args)
-            kohya_args = Namespace(**cfgs)
-            gen_img_diffusers.main(kohya_args)
+        retval = []
+        n_pnames, n_prompts, n_neg_prompts, n_seeds, n_sfws = [], [], [], [], []
+        for jfile in glob.glob(os.path.join(workdir, 'rtags', '*.json')):
+            with open(jfile, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                n_pnames.append(data['name'])
+                n_prompts.append(data['prompt'])
+                n_neg_prompts.append(data['neg_prompt'])
+                n_seeds.append(data['seed'])
+                n_sfws.append(data['sfw'])
+        n_total = len(n_pnames)
 
-            img_file = glob.glob(os.path.join(_tmp_output_dir, '*.png'))[0]
-            img = Image.open(img_file)
-            img.load()
+        for x in range(0, n_total, _N_MAX_DRAW):
+            pnames, prompts, neg_prompts, seeds, sfws = \
+                n_pnames[x:x + _N_MAX_DRAW], n_prompts[x:x + _N_MAX_DRAW], n_neg_prompts[x:x + _N_MAX_DRAW], \
+                n_seeds[x:x + _N_MAX_DRAW], n_sfws[x:x + _N_MAX_DRAW]
 
-            retval = Drawing(
-                os.path.basename(workdir), cfgs['prompt'], cfgs['n'], None,
-                sfw=len(detect_censors(img, conf_threshold=0.45)) == 0,
-                width=width, height=height, gscale=gscale, steps=infer_steps,
-                image=img, sample_method=sample_method, clip_skip=clip_skip,
-                model=pretrained_model, model_hash=model_hash,
-            )
+
+            with TemporaryDirectory() as td:
+                from omegaconf import OmegaConf
+                _tmp_output_dir = output_dir or td
+                args = {
+                    'ckpt': pretrained_model,
+                    'prompt': f'masterpiece, best quality, highres, game cg, 1girl, solo, {os.path.basename(workdir)}, {{night}}, {{starry sky}}, beach, beautiful detailed sky, bangs, looking_at_viewer, bare_shoulders, hair_between_eyes, cleavage, {{standing}}, looking at viewer, {{bikini:1.3}}, light smile',
+                    'network_weights': [lora_path],
+                    'network_mul': [lora_alpha],
+                    'outdir': _tmp_output_dir,
+                    'clip_skip': clip_skip,
+                    'sampler': 'euler',
+                }
+                cfgs = OmegaConf.merge(OmegaConf.load(kohya_cfg_file), args)
+                # args = data_to_cli_args(args)
+                # cfgs = load_config_with_cli(kohya_cfg_file, args)
+                kohya_args = Namespace(**cfgs)
+                gen_img_diffusers.main(kohya_args)
+
+                for i, (pname, prompt, n, seed, sfw) in \
+                        enumerate(zip(pnames, prompts, neg_prompts, seeds, sfws), start=1):
+                    img_file = glob.glob(os.path.join(_tmp_output_dir, '*.png'))[0]
+                    yaml_file = glob.glob(os.path.join(_tmp_output_dir, f'{i}-*.yaml'))[0]
+                    with open(yaml_file, 'r', encoding='utf-8') as f:
+                        seed = yaml.load(f, Loader)['seed']
+                    img = Image.open(img_file)
+                    img.load()
+                    retval.append(Drawing(
+                        pname, prompt, n, seed, sfw,
+                        width=width, height=height, gscale=gscale, steps=infer_steps,
+                        image=img, sample_method=sample_method, clip_skip=clip_skip,
+                        model=pretrained_model, model_hash=model_hash,
+                    ))
         return retval
 
 
