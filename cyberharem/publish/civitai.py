@@ -6,7 +6,9 @@ import os.path
 import re
 import textwrap
 import uuid
+from pathlib import Path
 from typing import Optional, Tuple, List, Union
+from cyberharem.utils.session import get_requests_session
 
 import blurhash
 import numpy as np
@@ -132,7 +134,6 @@ def civitai_upsert_model(
         },
         headers={'Referer': 'https://civitai.com/models/create'},
     )
-
     data = resp.json()['result']['data']['json']
     return data['id'], data['nsfw']
 
@@ -558,8 +559,15 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
     else:
         raise TypeError(f'Unknown source type - {source!r}.')
     hf_fs = get_hf_fs()
-    meta_json = json.loads(hf_fs.read_text(f'{repo}/meta.json'))
-    game_name = repo.split('_')[-1]
+    try:
+        meta_json = json.loads(hf_fs.read_text(f'{repo}/meta.json'))
+    except json.JSONDecodeError as e:
+        logging.error(hf_fs.read_text(f'{repo}/meta.json'))
+        logging.error('Metadata loading failed.')
+        raise e
+    game_name = "" if source.split("AppleHarem/")[1].split('_')[-1] == source.split("AppleHarem/")[1] else source.split("AppleHarem/")[1].split('_')[-1]
+    session_req = get_requests_session(max_retries=5, timeout=30, verify=True, headers=None, session=None)
+    session_req.cookies.update(json.loads(session))
 
     dataset_info = meta_json.get('dataset')
     ds_size = (384, 512) if not dataset_info or not dataset_info['type'] else dataset_info['type']
@@ -770,7 +778,9 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                                       key=lambda x: tags_idx[x])
 
             # publish model
-            session = session or get_civitai_session(timeout=30)
+            # session = session or get_civitai_session(timeout=30)
+            # session_req = get_requests_session(max_retries=5, timeout=30, verify=True, headers=None, session=None)
+            # session_req.cookies.update(json.load(session))
 
             model_desc_default = f"""
             * Thanks to Civitai's TOS, some images cannot be uploaded. **THE FULL PREVIEW IMAGES CAN BE FOUND ON [HUGGINGFACE](https://huggingface.co/{repo})**.
@@ -882,7 +892,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                     *map(_tag_decode, core_tags.keys()),
                 ],
                 exist_model_id=model_id,
-                session=session,
+                session=session_req,
             )
 
             version_data = civitai_create_version(
@@ -893,7 +903,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                     trigger_word,
                     repr_tags([key for key, _ in sorted(core_tags.items(), key=lambda x: -x[1])]),
                 ],
-                session=session,
+                session=session_req,
                 steps=step,
                 epochs=epoch,
             )
@@ -903,7 +913,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                 model_version_id=version_id,
                 model_files=models,
                 model_id=model_id,
-                session=session,
+                session=session_req,
             )
             civitai_upload_images(
                 model_version_id=version_id,
@@ -914,14 +924,14 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                     *map(_tag_decode, core_tags.keys()),
                 ],
                 model_id=model_id,
-                session=session,
+                session=session_req,
             )
 
             if draft:
                 logging.info(f'Draft of model {model_id!r} created.')
             else:
-                civiti_publish(model_id, version_id, publish_at, session)
-            return civitai_get_model_info(model_id, session)['id']
+                civiti_publish(model_id, version_id, publish_at, session_req)
+            return civitai_get_model_info(model_id, session_req)['id']
     else:
         # kohya
         ch_name = source.split("AppleHarem/")[1]
@@ -939,13 +949,14 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                 b_epoch = meta_json['best_epoch']
         else:
             b_epoch = max(all_epochs)
-        step = int(dataset_size * b_epoch)
+        b_epoch = str(b_epoch).zfill(6)
+        step = int(dataset_size * int(b_epoch))
         with TemporaryDirectory() as td:
             models_dir = os.path.join(td, 'models')
             os.makedirs(models_dir, exist_ok=True)
             models = []
-            lora_file = os.path.basename(hf_fs.glob(f'{repo}/{b_epoch}/*.safetensors')[0])
-            local_lora_file = os.path.join(models_dir, lora_file)
+            lora_file = f'{b_epoch}/'+os.path.basename(hf_fs.glob(f'{repo}/{b_epoch}/*.safetensors')[0])
+            local_lora_file = Path(os.path.join(models_dir, lora_file)).as_posix()
             download_file(hf_hub_url(repo, filename=f'{lora_file}'), local_lora_file)
             models.append((local_lora_file, lora_file))
             images_dir = os.path.join(td, 'images')
@@ -1061,7 +1072,10 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                                       key=lambda x: tags_idx[x])
             trigger_word = os.path.splitext(lora_file)[0]
             char_name = ' '.join(trigger_word.split('_')[:-1])
-            session = session or get_civitai_session(timeout=30)
+            # publish model
+            # session = session or get_civitai_session(timeout=30)
+            # session_req = get_requests_session(max_retries=5, timeout=30, verify=True, headers=None, session=None)
+            # session_req.cookies.update(json.load(session))
 
             param_author = {
                 0: "[AppleHarem](https://huggingface.co/AppleHarem)",
@@ -1140,7 +1154,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                     *map(_tag_decode, core_tags.keys()),
                 ],
                 exist_model_id=model_id,
-                session=session,
+                session=session_req,
             )
 
             version_data = civitai_create_version(
@@ -1151,7 +1165,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                     trigger_word,
                     repr_tags([key for key, _ in sorted(core_tags.items(), key=lambda x: -x[1])]),
                 ],
-                session=session,
+                session=session_req,
                 steps=step,
                 epochs=epoch,
             )
@@ -1161,7 +1175,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                 model_version_id=version_id,
                 model_files=models,
                 model_id=model_id,
-                session=session,
+                session=session_req,
             )
             civitai_upload_images(
                 model_version_id=version_id,
@@ -1172,14 +1186,14 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                     *map(_tag_decode, core_tags.keys()),
                 ],
                 model_id=model_id,
-                session=session,
+                session=session_req,
             )
 
             if draft:
                 logging.info(f'Draft of model {model_id!r} created.')
             else:
-                civiti_publish(model_id, version_id, publish_at, session)
-            return civitai_get_model_info(model_id, session)['id']
+                civiti_publish(model_id, version_id, publish_at, session_req)
+            return civitai_get_model_info(model_id, session_req)['id']
 
 
 

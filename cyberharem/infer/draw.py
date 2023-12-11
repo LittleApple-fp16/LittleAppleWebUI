@@ -311,7 +311,8 @@ def draw_with_workdir_kohya(workdir: str, lora_path: str, pretrained_model: str 
                     img = Image.open(img_file)
                     img.load()
                     retval.append(Drawing(
-                        pname, prompt, n, seed, sfw,
+                        pname, prompt, n, seed,
+                        sfw=sfw and len(detect_censors(img, conf_threshold=0.45)) == 0,
                         width=width, height=height, gscale=gscale, steps=infer_steps,
                         image=img, sample_method=sample_method, clip_skip=clip_skip,
                         model=pretrained_model, model_hash=model_hash,

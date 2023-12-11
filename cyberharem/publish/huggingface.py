@@ -100,8 +100,8 @@ def deploy_to_huggingface(workdir: str, o_repository=None, revision: str = 'main
         for i, (file, segments) in enumerate(_exist_ps):
             if i < len(_exist_ps) - 1 and segments == _exist_ps[i + 1][1][:len(segments)]:
                 continue
-            if file != '.':
-                pre_exist_files.add(file)
+            if file != '.' and '.' in file:
+                pre_exist_files.add(Path(file).as_posix())
 
         operations = []
         for directory, _, files in os.walk(td):
@@ -116,8 +116,7 @@ def deploy_to_huggingface(workdir: str, o_repository=None, revision: str = 'main
                     pre_exist_files.remove(file_in_repo)
         logging.info(f'Useless files: {sorted(pre_exist_files)} ...')
         for file in sorted(pre_exist_files):
-            if '.' in file:
-                operations.append(CommitOperationDelete(path_in_repo=Path(file).as_posix()))
+            operations.append(CommitOperationDelete(path_in_repo=Path(file).as_posix()))
 
         tokyo_tz = pytz.timezone('Asia/Tokyo')
         current_time = datetime.datetime.now().astimezone(tokyo_tz).strftime('%Y-%m-%d %H:%M:%S %Z')

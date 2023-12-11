@@ -27,6 +27,7 @@ call %VENV_NAME%\Scripts\activate.bat
 echo [info] Auto update...
 git pull
 echo [info] Starting webui...
+echo [warning] You are using share mode, this is not safe!!!
 %PYTHON% webui.py --share %*
 pause
 exit /b

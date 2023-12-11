@@ -915,15 +915,15 @@ def pipeline_start(ch_names, train_type, toml_index):
         else:
             save_path = "pipeline\\dataset\\_kohya\\" + ch_e + f"\\1_{ch_e}"
 ###
-        source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
-        source_init.attach(*actions).export(
-            TextualInversionExporter(save_path)
-        )
-###
-        if not is_kohya:
-            run_train_plora(ch_e, bs=bs, epoc=epoc, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
-        else:
-            run_train_lora(ch_e, bs=bs, epoch=epoc, toml_index=toml_index, is_pipeline=True)
+#         source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+#         source_init.attach(*actions).export(
+#             TextualInversionExporter(save_path)
+#         )
+# ###
+#         if not is_kohya:
+#             run_train_plora(ch_e, bs=bs, epoc=epoc, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
+#         else:
+#             run_train_lora(ch_e, bs=bs, epoch=epoc, toml_index=toml_index, is_pipeline=True)
 ###
 
         def huggingface(workdir: str, repository, revision, n_repeats, pretrained_model,
@@ -978,7 +978,7 @@ def pipeline_start(ch_names, train_type, toml_index):
                 )
 
         def civitai(repository, title, steps, epochs, draft, publish_time, allow_nsfw,
-                    version_name, force_create, no_ccip_check, session=None, is_pipeline=False, is_kohya=False):
+                    version_name, force_create, no_ccip_check, session, is_pipeline=False, is_kohya=False):
             logging.try_init_root(logging.INFO)
             model_id = civitai_publish_from_hf(
                 repository, title,
@@ -997,11 +997,11 @@ def pipeline_start(ch_names, train_type, toml_index):
         # huggingface(workdir='pipeline\\runs\\' + ch_e, repository=None, n_repeats=3, pretrained_model=_DEFAULT_INFER_MODEL, width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
         # rehf(repository=ch_e, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
         # civitai(repository=ch_e, draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=cfg.get('civitai_token', ''), epochs=None, publish_time=None, steps=None, title=None, version_name=None)
-        try:
-            huggingface(workdir='pipeline/runs/' + ('_kohya/' if is_kohya else '') + ch_e, repository=None, n_repeats=3, pretrained_model=_DEFAULT_INFER_MODEL, width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
-        except Exception as e:
-            logger.error(" - 错误:", e)
-            raise e
+        # try:
+        #     huggingface(workdir='pipeline/runs/' + ('_kohya/' if is_kohya else '') + ch_e, repository=None, n_repeats=3, pretrained_model=_DEFAULT_INFER_MODEL, width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
+        # except Exception as e:
+        #     logger.error(" - 错误:", e)
+        #     raise e
         if not is_kohya:
             try:
                 rehf(repository=f'AppleHarem/{ch_e}', n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
@@ -1009,7 +1009,7 @@ def pipeline_start(ch_names, train_type, toml_index):
                 logger.error(" - 错误:", e)
                 raise e
         try:
-            civitai(repository=f'AppleHarem/{ch_e}', draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=cfg.get('civitai_token', ''), epochs=epoc, publish_time=None, steps=None, title=None, version_name=None, is_pipeline=True, is_kohya=is_kohya)
+            civitai(repository=f'AppleHarem/{ch_e}', draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=cfg.get('civitai_token', ''), epochs=epoc, publish_time=None, steps=None, title=ch_e, version_name=None, is_pipeline=True, is_kohya=is_kohya)
         except Exception as e:
             logger.error(" - 错误:", e)
             raise e
@@ -1376,12 +1376,12 @@ if __name__ == "__main__":
                 fanbox_get_cookie = gr.Button("前往查询", interactive=True)
                 with gr.Accordion("Cookie说明", open=False):
                     gr.Markdown("获取Fanbox图片需要Kemono网站Cookie\n"
-                                "Cookie格式：{xxx}，名为session的cookie\n"
+                                "Cookie格式：[{xxx},{x..}]，名为session的cookie\n"
                                 "具体操作：使用EditThisCookie浏览器扩展\n"
                                 "进入Kemono网站，导出cookie，将cookie粘贴到设置中，删除第一项和第三项，\n"
-                                "删除[]大括号，只保留名为session的cookie{xxx}即可")
+                                "无需[]大括号，只保留名为session的cookie{xxx}即可")
             with gr.Tab("Civitai"):
-                civitai_token = gr.Textbox(label="Cookie", placeholder="不填写无法自动上传c站", interactive=True, value=cfg.get('civitai_token', ''))
+                civitai_token = gr.Textbox(label="Cookie", lines=13, placeholder="不填写无法自动上传c站", interactive=True, value=cfg.get('civitai_token', ''))
             with gr.Tab("Huggingface"):
                 hf_token_show = gr.Textbox(label="Token", value=get_hf_token(), info="Huggingface的token需要在环境变量中设置", interactive=False)
                 hf_token_ref = gr.Button("刷新token")

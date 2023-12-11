@@ -327,7 +327,8 @@ def export_workdir(workdir: str, export_dir: str, n_repeats: int = 2,
             else:
                 epochs.sort()
                 # 最大epoch加增量
-                epoch = (epochs[-1] + max(set([j - i for i, j in zip(epochs[:-1], epochs[1:])]), key=[j - i for i, j in zip(epochs[:-1], epochs[1:])].count))
+                epoch = epochs[-1] + max(set([j - i for i, j in zip(epochs[:-1], epochs[1:])]), key=[j - i for i, j in zip(epochs[:-1], epochs[1:])].count)
+                epoch = str(epoch).zfill(6)
                 epochs.append(int(epoch))
             epoch_dir = os.path.join(export_dir, f'{epoch}')
             preview_dir = os.path.join(epoch_dir, 'previews')
@@ -389,50 +390,51 @@ def export_workdir(workdir: str, export_dir: str, n_repeats: int = 2,
             print('', file=f)
 
             print(dedent(f"""
-        The trigger words are:
-        1. `{name}`
-        2. `{repr_tags([key for key, _ in sorted(core_tags.items(), key=lambda x: -x[1])])}`
-                """).strip(), file=f)
+            The trigger words are:
+            1. `{name}`
+            2. `{repr_tags([key for key, _ in sorted(core_tags.items(), key=lambda x: -x[1])])}`
+                    """).strip(), file=f)
             print('', file=f)
 
             print(dedent("""
-        For the following groups, it is not recommended to use this model and we express regret:
-        1. Individuals who cannot tolerate any deviations from the original character design, even in the slightest detail.
-        2. Individuals who are facing the application scenarios with high demands for accuracy in recreating character outfits.
-        3. Individuals who cannot accept the potential randomness in AI-generated images based on the Stable Diffusion algorithm.
-        4. Individuals who are not comfortable with the fully automated process of training character models using LoRA, or those who believe that training character models must be done purely through manual operations to avoid disrespecting the characters.
-        5. Individuals who finds the generated image content offensive to their values.
-        6. Individuals who feel that writing a WebUI is meaningless or impatient.
-                """).strip(), file=f)
+            For the following groups, it is not recommended to use this model and we express regret:
+            1. Individuals who cannot tolerate any deviations from the original character design, even in the slightest detail.
+            2. Individuals who are facing the application scenarios with high demands for accuracy in recreating character outfits.
+            3. Individuals who cannot accept the potential randomness in AI-generated images based on the Stable Diffusion algorithm.
+            4. Individuals who are not comfortable with the fully automated process of training character models using LoRA, or those who believe that training character models must be done purely through manual operations to avoid disrespecting the characters.
+            5. Individuals who finds the generated image content offensive to their values.
+            6. Individuals who feel that writing a WebUI is meaningless or impatient.
+                    """).strip(), file=f)
             print('', file=f)
 
 
-        print(f'These are available steps:', file=f)
-        print('', file=f)
+            print(f'These are available epochs:', file=f)
+            print('', file=f)
 
-        d_names = sort_draw_names(list(d_names))
-        columns = ['Steps', 'Score', 'Download', *d_names]
-        t_data = []
+            d_names = sort_draw_names(list(d_names))
+            columns = ['Epochs', 'Score', 'Download', *d_names]
+            t_data = []
 
-        for epoch in epochs[::-1]:
-            d_mds = []
-            for dname in d_names:
-                file = Path(os.path.join(str(epoch), 'previews', f'{dname}.png')).as_posix()
-                if (dname, epoch) in all_drawings:
-                    if nsfw_ratio.get(dname, 0.0) < 0.35:
-                        d_mds.append(f'![{dname}-{epoch}]({file})')
+            for epoch in epochs[::-1]:
+                epoch = str(epoch).zfill(6)
+                d_mds = []
+                for dname in d_names:
+                    file = Path(os.path.join(str(epoch), 'previews', f'{dname}.png')).as_posix()
+                    if (dname, epoch) in all_drawings:
+                        if nsfw_ratio.get(dname, 0.0) < 0.35:
+                            d_mds.append(f'![{dname}-{epoch}]({file})')
+                        else:
+                            d_mds.append(f'[<NSFW, click to see>]({file})')
                     else:
-                        d_mds.append(f'[<NSFW, click to see>]({file})')
-                else:
-                    d_mds.append('')
+                        d_mds.append('')
 
-            t_data.append((
-                str(epoch) if epoch != best_epoch else f'**{epoch}**',
-                f'{all_scores[epoch]:.3f}' if epoch != best_epoch else f'**{all_scores[epoch]:.3f}**',
-                f'[Download]({epoch}/{name}.zip)' if epoch != best_epoch else f'[**Download**]({epoch}/{name}.zip)',
-                *d_mds,
-            ))
+                t_data.append((
+                    int(epoch) if int(epoch) != best_epoch else f'**{int(epoch)}**',
+                    f'{all_scores[int(epoch)]:.3f}' if int(epoch) != best_epoch else f'**{all_scores[int(epoch)]:.3f}**',
+                    f'[Download]({epoch}/*.safetensors)' if int(epoch) != best_epoch else f'[**Download**]({epoch}/*.safetensors)',
+                    *d_mds,
+                ))
 
-        df = pd.DataFrame(columns=columns, data=t_data)
-        print(df.to_markdown(index=False), file=f)
-        print('', file=f)
+            df = pd.DataFrame(columns=columns, data=t_data)
+            print(df.to_markdown(index=False), file=f)
+            print('', file=f)
