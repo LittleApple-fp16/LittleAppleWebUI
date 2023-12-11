@@ -5,7 +5,7 @@ facilitate more complex dataset operations and simpler manual training.
 <br><br>
 Almost all functions are from DeepGHS' work, these things are awesome! However, this training interface has not queue capabilities.<br>
 But we can do full-auto training now, select your favorite preset and fill waifu name, then press the button!<br>
-We have both HCP & kohya-ss script!
+We have both HCP & kohya-ss script supported!
 <br>
 I didn't know that there was already webui support for plora training, so I tried writing this and later added some processing functions. <br>As you can see, I am trying to restore a manual pipeline process.
 <br><br>
@@ -16,13 +16,13 @@ there are something interesting there :)
 * Python 3.10.6
 * Dependencies will be installed on first start.
 * If there are something broken, delete `venv`.
-* Torch can be install automaticlly now, CUDA version 11.8 and 12.1 can be detected from device,
+* Torch can be install automaticlly now, CUDA version 11.8 and 12.1 can be detected from device.
 * If your CUDA is not supported, you can also install it manually.
 ```shell
 git clone https://github.com/LittleApple-fp16/LittleAppleWebUI.git
 ```
 ## Usage
-start webui.bat
+run `webui.bat`
 
 ## Preview
 ![waifuc](https://github.com/LittleApple-fp16/LittleAppleWebUI/blob/master/markdown_res/preview1.svg)
