@@ -1224,3 +1224,4 @@ fabric.properties
 /config.json
 tblog
 /pipeline
+/stable_diffusion_ckpt
