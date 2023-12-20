@@ -4,11 +4,13 @@ import json
 import logging
 import os
 import shutil
+import yaml
 from dataclasses import dataclass
 from textwrap import dedent
 from typing import List, Union, Optional
+from cyberharem.utils import download_file
+from huggingface_hub import hf_hub_url
 
-import yaml
 from PIL.PngImagePlugin import PngInfo
 from imgutils.detect import detect_censors
 
@@ -28,6 +30,10 @@ from argparse import Namespace
 _DEFAULT_INFER_CFG_FILE = 'cfgs/infer/text2img_anime_lora.yaml'
 _KOHYA_INFER_CFG_FILE = 'cfgs/infer/kohya_anime_lora.yaml'
 _DEFAULT_INFER_MODEL = 'LittleApple-fp16/SpiritForeseerMix'
+_VAE_MSE = 'LittleApple-fp16/vae-ft-mse-840000-ema-pruned'
+_VAE_CLEAR = 'LittleApple-fp16/ClearVAE'
+_EASY_NEG = 'LittleApple-fp16/EasyNegative'
+_BAD_HAND_NEG = 'LittleApple-fp16/badhandv4'
 
 
 def sample_method_to_config(method):
@@ -65,7 +71,7 @@ def draw_images(
         model_steps: int = 1000, n_repeats: int = 2, pretrained_model: str = _DEFAULT_INFER_MODEL,
         width: int = 512, height: int = 768, gscale: float = 8, infer_steps: int = 30,
         lora_alpha: float = 0.85, output_dir: str = 'output', cfg_file: str = _DEFAULT_INFER_CFG_FILE,
-        clip_skip: int = 2, sample_method: str = 'DPM++ 2M Karras'
+        clip_skip: int = 2, sample_method: str = 'DPM++ 2M Karras', vae: str = None
 ):
     emb_name = emb_name or os.path.basename(workdir)
     with TemporaryDirectory() as emb_dir:
@@ -75,6 +81,8 @@ def draw_images(
 
         src_pt_file = src_pt_files[0]
         shutil.copyfile(src_pt_file, os.path.join(emb_dir, f'{emb_name}.pt'))
+        download_file(hf_hub_url(_EASY_NEG, filename=f'EasyNegative.safetensors'), 'EasyNegative.safetensors')
+        download_file(hf_hub_url(_BAD_HAND_NEG, filename=f'badhandv4.pt'), 'badhandv4.pt')
 
         args = {
             'pretrained_model': pretrained_model,
@@ -108,6 +116,12 @@ def draw_images(
             'new_components': {
                 'scheduler': sample_method_to_config(sample_method),
                 'vae': {
+                    '_target_': 'diffusers.AutoencoderKL.from_pretrained',
+                    'pretrained_model_name_or_path': _VAE_MSE,  # path to vae model
+                       } or {
+                    '_target_': 'diffusers.AutoencoderKL.from_pretrained',
+                    'pretrained_model_name_or_path': _VAE_CLEAR,  # path to vae model
+                       } or {
                     '_target_': 'diffusers.AutoencoderKL.from_pretrained',
                     'pretrained_model_name_or_path': 'deepghs/animefull-latest',  # path to vae model
                     'subfolder': 'vae',
@@ -237,7 +251,7 @@ def draw_with_workdir(
                 workdir, prompts, neg_prompts, seeds,
                 emb_name, save_cfg, model_steps, n_repeats, pretrained_model,
                 width, height, gscale, infer_steps, lora_alpha, _tmp_output_dir, cfg_file,
-                clip_skip, sample_method,
+                clip_skip, sample_method, _VAE_MSE  # if vae is none, will use nai vae
             )
 
             for i, (pname, prompt, neg_prompt, seed, sfw) in \
@@ -287,7 +301,8 @@ def draw_with_workdir_kohya(workdir: str, lora_path: str, pretrained_model: str 
             with TemporaryDirectory() as td:
                 from omegaconf import OmegaConf
                 _tmp_output_dir = output_dir or td
-#
+                download_file(hf_hub_url(_EASY_NEG, filename=f'EasyNegative.safetensors'), 'EasyNegative.safetensors')
+                download_file(hf_hub_url(_BAD_HAND_NEG, filename=f'badhandv4.pt'), 'badhandv4.pt')
                 for i, (pname, prompt, n, seed, sfw) in \
                         enumerate(zip(pnames, prompts, neg_prompts, seeds, sfws), start=1):
                     args = {
@@ -300,6 +315,8 @@ def draw_with_workdir_kohya(workdir: str, lora_path: str, pretrained_model: str 
                         'outdir': _tmp_output_dir,
                         'clip_skip': clip_skip,
                         'sampler': 'euler',
+                        'textual_inversion_embeddings': ['EasyNegative.safetensors', 'badhandv4.pt'],
+                        'vae': _VAE_MSE
                     }
                     cfgs = OmegaConf.merge(OmegaConf.load(kohya_cfg_file), args)
                     # args = data_to_cli_args(args)

@@ -8,6 +8,7 @@ import textwrap
 import uuid
 from pathlib import Path
 from typing import Optional, Tuple, List, Union
+from urllib.parse import urlparse
 from cyberharem.utils.session import get_requests_session
 
 import blurhash
@@ -119,23 +120,27 @@ def civitai_upsert_model(
         post_json['id'] = exist_model_id
         post_json["locked"] = False
         post_json["status"] = "Published"
+        post_json["authed"] = True
         logging.info(f'Model {name!r}({exist_model_id}) already exist, updating its new information. '
                      f'Tags: {[item["name"] for item in tag_list]!r} ...')
     else:
         logging.info(f'Creating model {name!r}, tags: {[item["name"] for item in tag_list]!r} ...')
-
-    resp = session.post(
-        'https://civitai.com/api/trpc/model.upsert',
-        json={
-            "json": post_json,
-            "meta": {
-                "values": _meta_values,
-            }
-        },
-        headers={'Referer': 'https://civitai.com/models/create'},
-    )
-    data = resp.json()['result']['data']['json']
-    return data['id'], data['nsfw']
+    try:
+        resp = session.post(
+            'https://civitai.com/api/trpc/model.upsert',
+            json={
+                "json": post_json,
+                "meta": {
+                    "values": _meta_values,
+                },
+            },
+            headers={'Referer': 'https://civitai.com/models/create'},
+        )
+        data = resp.json()['result']['data']['json']
+        return data['id'], data['nsfw']
+    except KeyError as e:
+        print("an error occured at resp: ", str(resp.json()))
+        raise e
 
 
 def civitai_query_vae_models(session=None, model_id=None):
@@ -197,32 +202,32 @@ def civitai_create_version(
 
 def civitai_upload_file(local_file: str, type_: str = 'model', filename: str = None,
                         model_id: int = None, session=None):
-    session = session or get_civitai_session()
+    session_r = session or get_civitai_session()
     filename = filename or os.path.basename(local_file)
 
     logging.info(f'Creating uploading request for {filename!r} ...')
     resp = srequest(
-        session, 'POST', 'https://civitai.com/api/upload',
+        session_r, 'POST', 'https://civitai.com/api/upload',
         json={
             "filename": filename,
             "type": type_,
             "size": os.path.getsize(local_file),
         },
-        headers={'Referer': f'https://civitai.com/models/{model_id or 0}/wizard?step=3'}
+        headers={'Referer': f'https://civitai.com/models/{model_id or 0}/wizard?step=3'},
     )
     upload_data = resp.json()
 
     logging.info(f'Uploading file {local_file!r} as {filename!r} ...')
     with open(local_file, 'rb') as f:
         resp = srequest(
-            session, 'PUT', upload_data['urls'][0]['url'], data=f,
-            headers={'Referer': f'https://civitai.com/models/{model_id or 0}/wizard?step=3'},
+            session_r, 'PUT', upload_data['urls'][0]['url'], data=f,
+            headers={'Referer': 'https://civitai.com/'}
         )
         etag = resp.headers['ETag']
 
     logging.info(f'Completing uploading for {filename!r} ...')
     resp = srequest(
-        session, 'POST', 'https://civitai.com/api/upload/complete',
+        session_r, 'POST', 'https://civitai.com/api/upload/complete',
         json={
             "bucket": upload_data['bucket'],
             "key": upload_data['key'],
@@ -250,7 +255,7 @@ def civitai_upload_models(model_version_id: int, model_files: List[Union[str, Tu
     file_items = []
     for file_item in model_files:
         if isinstance(file_item, str):
-            local_file, filename = file_item, file_item
+            local_file, filename = file_item, os.path.basename(file_item)
         elif isinstance(file_item, tuple):
             local_file, filename = file_item
         else:
@@ -258,6 +263,8 @@ def civitai_upload_models(model_version_id: int, model_files: List[Union[str, Tu
         file_items.append((local_file, filename))
 
     for local_file, filename in file_items:
+        filename = os.path.basename(filename)
+        logging.info(f'Uploading {filename!r} at path: {local_file} ...')
         upload_data = civitai_upload_file(local_file, 'model', filename, model_id, session)
         logging.info(f'Creating {filename!r} as model file of version {model_version_id} ...')
         resp = srequest(
@@ -551,7 +558,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                             step: Optional[int] = None, epoch: Optional[int] = None, upload_min_epoch: int = 6,
                             draft: bool = False, publish_at=None, allow_nsfw_images: bool = True,
                             force_create_model: bool = False, no_ccip_check: bool = False, session=None,
-                            is_pipeline=False, is_kohya=False, toml_index=0):
+                            is_pipeline=False, is_kohya=False, toml_index=0, verify=True):
     if isinstance(source, Character):
         repo = f'AppleHarem/{get_ch_name(source)}'
     elif isinstance(source, str):
@@ -566,8 +573,11 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
         logging.error('Metadata loading failed.')
         raise e
     game_name = "" if source.split("AppleHarem/")[1].split('_')[-1] == source.split("AppleHarem/")[1] else source.split("AppleHarem/")[1].split('_')[-1]
-    session_req = get_requests_session(max_retries=5, timeout=30, verify=True, headers=None, session=None)
-    session_req.cookies.update(json.loads(session))
+    if session:
+        session_req = get_requests_session(max_retries=5, timeout=30, verify=verify, headers=None, session=None)
+        session_req.cookies.update(json.loads(session))
+    else:
+        session_req = get_civitai_session(max_retries=5, timeout=30, verify=verify, headers=None, session=None)
 
     dataset_info = meta_json.get('dataset')
     ds_size = (384, 512) if not dataset_info or not dataset_info['type'] else dataset_info['type']
@@ -594,15 +604,18 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                 if dataset_info and dataset_info['size']:
                     dataset_size = dataset_info['size']
                 else:
-                    dataset_size = len(glob.glob(os.path.join(d, '*.png')))
-                core_tags, _ = load_tags_from_directory(d)
-                logging.info(f'Size of dataset if {dataset_size!r}.')
+                    dataset_size = len(glob.glob(os.path.join(os.path.join(d, f'[1-100]*_{ch_name}'), '*.png'))) if is_kohya else len(glob.glob(os.path.join(d, '*.png')))
+                core_tags, _ = load_tags_from_directory(os.path.join(d, f'[1-100]*_{ch_name}') if is_kohya else d)
+                logging.info(f'Size of dataset is {dataset_size!r}.')
 
                 ccip_feats = []
                 for item in tqdm(list(LocalSource(d)[:10]), desc='Extracting features'):
                     ccip_feats.append(ccip_extract_feature(item.image))
     except ValueError:
         logging.info('No dataset in AppleHarem.')
+        dataset_size = 0
+        ccip_feats = []
+        core_tags = {}
         # ch_name = source.split("AppleHarem/")[1]
         # if is_pipeline:
         #     dataset_local_dir = f'pipeline/dataset/{f"{ch_name}" if not is_kohya else "_kohya/" + f"{ch_name}/1_{ch_name}/"}'
@@ -655,7 +668,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
             lora_file = os.path.basename(hf_fs.glob(f'{repo}/{step}/*.safetensors')[0])
             pt_file = os.path.basename(hf_fs.glob(f'{repo}/{step}/*.pt')[0])
             trigger_word = os.path.splitext(lora_file)[0]
-            char_name = ' '.join(trigger_word.split('_')[:-1])
+            char_name = ' '.join(trigger_word.split('_')[:-1]) or trigger_word
 
             models = []
             local_lora_file = os.path.join(models_dir, lora_file)
@@ -870,7 +883,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
             6. Individuals who feel that writing a WebUI is meaningless or impatient.
             """
             model_name = model_name or try_find_title(char_name, game_name) or \
-                         try_get_title_from_repo(repo) or trigger_word.replace('_', ' ')
+                         try_get_title_from_repo(repo) or trigger_word.replace('_', ' ') or get_ch_name(source)
             # if not force_create_model:
             #     try:
             #         exist_model = civitai_find_online(model_name, creator='narugo1992')
@@ -931,7 +944,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                 logging.info(f'Draft of model {model_id!r} created.')
             else:
                 civiti_publish(model_id, version_id, publish_at, session_req)
-            return civitai_get_model_info(model_id, session_req)['id']
+        return civitai_get_model_info(model_id, session_req)['id']
     else:
         # kohya
         ch_name = source.split("AppleHarem/")[1]
@@ -1011,6 +1024,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                                 }
                             ]
                             meta["Model hash"] = model_hash
+                    pil_img_file.close()
 
                 nsfw = (info.get('Safe For Word', info.get('Safe For Work')) or '').lower() != 'yes'
                 if not nsfw:
@@ -1070,13 +1084,10 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
             max_tag_cnt = max(tags_count.values())
             recommended_tags = sorted([ptag for ptag, cnt in tags_count.items() if cnt == max_tag_cnt],
                                       key=lambda x: tags_idx[x])
-            trigger_word = os.path.splitext(lora_file)[0]
+            trigger_word = ch_name
             char_name = ' '.join(trigger_word.split('_')[:-1])
-            # publish model
-            # session = session or get_civitai_session(timeout=30)
-            # session_req = get_requests_session(max_retries=5, timeout=30, verify=True, headers=None, session=None)
-            # session_req.cookies.update(json.load(session))
 
+            # publish model
             param_author = {
                 0: "[AppleHarem](https://huggingface.co/AppleHarem)",
                 1: "[i1998](https://civitai.com/user/i1998)",
@@ -1084,54 +1095,54 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
             }
             get_author = param_author.get(toml_index, "Unknown")
             model_desc_default = f"""
-                        * **YOU CAN ALSO FIND THIS MODEL ON HUGGINGFACE [HUGGINGFACE](https://huggingface.co/{repo})**.
+                        * **YOU CAN ALSO FIND THIS MODEL ON [HUGGINGFACE](https://huggingface.co/{repo})**.
                         * **<span style="color:#52fa72">THIS MODEL HAS ONE FILE. ENJOY IT.</span>**
                         * **The trigger word is `{trigger_word}`, and the recommended tags are `{', '.join(recommended_tags)}`.**.
-                        * Recommended weight is 0.5-0.85. 
-                        * Images were generated using a few fixed prompts and dataset-based clustered prompts(TODO). Random seeds were used, ruling out cherry-picking. **What you see here is what you can get.**
+                        * Recommended weight is 0.5-1.15. 
+                        * Images were generated using a few fixed prompts and dataset-based clustered prompts. Random seeds were used, ruling out cherry-picking. **What you see here is what you can get.**
                         * No specialized training was done for outfits. You can check our provided preview post to get the prompts corresponding to the outfits.
                         * This model is trained with **{plural_word(dataset_size, "image")}**.
 
                         ## How to Use This Model
 
-                        **<span style="color:#52fa72">THIS MODEL HAS ONE FILE. ENJOY IT.</span>**. 
-                        In this case, you just need to download `{lora_file}`.
+                        **<span style="color:#52fa72">THIS MODEL HAS ONE FILE. ENJOY IT.</span>**
+                        In this case, you just need to download `{char_name}.safetensors`.
 
-                        **<span style="color:#52fa72">このフォルダにはファイルが1つあります。それらを楽しんでください</span>**。
-                        この場合、ダウンロード`{lora_file}`できます。
+                        **<span style="color:#52fa72">このフォルダにはファイルが1つあります。それらを楽しんでください</span>**
+                        この場合、ダウンロード`{char_name}.safetensors`できます。
 
-                        **<span style="color:#52fa72">这个模型有一个文件。玩的开心。</span>**。
-                        在这种情况下，您只需下载`{lora_file}`这个文件。
+                        **<span style="color:#52fa72">这个模型有一个文件。玩的开心。</span>**
+                        在这种情况下，您只需下载`{char_name}.safetensors`这个文件。
 
-                        **<span style="color:#52fa72">이 모델은 파일이 하나 있습니다. 즐기세요.</span>**. 
-                        이 경우, {lora_file}을 다운로드하시면 됩니다.
+                        **<span style="color:#52fa72">이 모델은 파일이 하나 있습니다. 즐기세요.</span>**
+                        이 경우, {char_name}.safetensors을 다운로드하시면 됩니다.
 
                         (Translated with ChatGPT)
 
                         ## How This Model Is Trained
 
-                        This model is trained with [kohya-ss' sd-script](https://github.com/kohya-ss/sd-scripts). 
+                        This model is trained with [kohya's sd-script](https://github.com/kohya-ss/sd-scripts). 
                         Using auto-fulled param by {get_author}.
                         And the auto-training framework is maintained by [DeepGHS Team](https://huggingface.co/deepghs).
-                        And the WebUI Panel provid by [LittleAppleWebUI](https://github.com/LittleApple-fp16/LittleAppleWebUI)
+                        
+                        And the WebUI Panel provide by [LittleAppleWebUI](https://github.com/LittleApple-fp16/LittleAppleWebUI).
 
                         ## Why Some Preview Images Not Look Like {" ".join(map(str.capitalize, trigger_word.split("_")))}
 
                         Our kohya training process only uses **auto fill parameters**, so you should contact the author of the parameters.
 
-                        **You may need to do is adjusting the tags you are using, or give up.**.
+                        **You may need to do is adjusting the tags you are using, or give up.**
 
                         ## I Felt This Model May Be Overfitting or Underfitting, What Shall I Do
 
                         Our model has been published on [huggingface repository - {repo}](https://huggingface.co/{repo}), where
-                        models of all the epochs are saved. Also, we published the training dataset on 
-                        [huggingface dataset - {repo}](https://huggingface.co/datasets/{repo}), which may be helpful to you.
+                        models of all the epochs are saved, which may be helpful to you.
 
 
                         This model's greatest strengths lie in recreating the inherent characteristics of the characters 
                         themselves and its relatively strong generalization capabilities, owing to its larger dataset. 
                         As such, **this model is well-suited for tasks such as changing outfits, posing characters, and, 
-                        of course, generating NSFW images of characters!**🤬".
+                        of course, generating NSFW images of characters!**🤬
 
                         For the following groups, it is not recommended to use this model and we express regret:
 
@@ -1142,17 +1153,26 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                         5. Individuals who finds the generated image content offensive to their values.
                         6. Individuals who feel that writing a WebUI is meaningless or impatient.
                         """
-            model_name = model_name or try_get_title_from_repo(repo)
+            model_name = model_name or try_find_title(char_name, game_name) or \
+                         try_get_title_from_repo(repo) or trigger_word.replace('_', ' ')
             model_id = None
             char_name = ch_name
+            if game_name:
+                tags = [
+                           f"{game_name} {char_name}", char_name,
+                           'female', 'girl', 'character', 'anime',
+                           *map(_tag_decode, core_tags.keys()),
+                       ]
+            else:
+                tags = [
+                           char_name,
+                           'female', 'girl', 'character', 'anime',
+                           *map(_tag_decode, core_tags.keys()),
+                       ]
             model_id, _ = civitai_upsert_model(
                 name=model_name,
                 description_md=model_desc_md or model_desc_default,
-                tags=[
-                    f"{game_name} {char_name}", char_name,
-                    'female', 'girl', 'character', 'anime',
-                    *map(_tag_decode, core_tags.keys()),
-                ],
+                tags=tags,
                 exist_model_id=model_id,
                 session=session_req,
             )
@@ -1181,7 +1201,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                 model_version_id=version_id,
                 image_files=images,
                 tags=[
-                    game_name, f"{game_name} {char_name}", char_name,
+                    f"{game_name} {char_name}", char_name,
                     'female', 'girl', 'character', 'fully-automated', 'random prompt', 'random seed',
                     *map(_tag_decode, core_tags.keys()),
                 ],
@@ -1193,7 +1213,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                 logging.info(f'Draft of model {model_id!r} created.')
             else:
                 civiti_publish(model_id, version_id, publish_at, session_req)
-            return civitai_get_model_info(model_id, session_req)['id']
+        return civitai_get_model_info(model_id, session_req)['id']
 
 
 

@@ -110,7 +110,6 @@ paramiko==3.3.1
 pathtools==0.1.2
 Pillow==9.5.0
 pilmoji==2.0.4
-pixivpy3==3.7.3
 platformdirs==3.11.0
 pre-commit==3.5.0
 protobuf

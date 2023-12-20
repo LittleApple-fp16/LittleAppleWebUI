@@ -1225,3 +1225,4 @@ fabric.properties
 tblog
 /pipeline
 /stable_diffusion_ckpt
+/test

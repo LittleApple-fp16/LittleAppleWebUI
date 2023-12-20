@@ -10,8 +10,9 @@ git pull
 
 if not exist %VENV_NAME% (
     echo [init] Creating venv...
-    %PYTHON% -m venv %VENV_NAME%
+    %PYTHON% -m venv --without-pip %VENV_NAME%
     call %VENV_NAME%\Scripts\activate.bat
+    python littleapple\get-pip.py
     @rem [init] Setting path...
     set "path=%cd%\%VENV_NAME%\scripts;%cd%\%VENV_NAME%\dep\python;%cd%\%VENV_NAME%\dep\python\scripts;%cd%\%VENV_NAME%\dep\git\bin;%cd%;%path%"
     echo [init] Installing deps...

@@ -79,7 +79,7 @@ def get_requests_session(max_retries: int = 5, timeout: int = DEFAULT_TIMEOUT, v
     retries = Retry(
         total=max_retries, backoff_factor=1,
         status_forcelist=[408, 413, 429, 500, 501, 502, 503, 504, 505, 506, 507, 509, 510, 511],
-        allowed_methods=["HEAD", "GET", "POST", "PUT", "DELETE", "OPTIONS", "TRACE"],
+        allowed_methods=["HEAD", "GET", "POST", "PUT", "DELETE", "OPTIONS", "TRACE"],  # method_whitelist if urllib<=1.26 else allowed_methods
     )
     adapter = TimeoutHTTPAdapter(max_retries=retries, timeout=timeout, pool_connections=32, pool_maxsize=32)
     session.mount('http://', adapter)
@@ -99,12 +99,15 @@ def get_civitai_session(
         civitai_repository: str = 'LittleApple-fp16/civitai_session',
         max_retries: int = 5, timeout: int = DEFAULT_TIMEOUT, verify: bool = True,
         headers: Optional[Dict[str, str]] = None, session: Optional[requests.Session] = None) -> requests.Session:
-    session = get_requests_session(max_retries, timeout, verify, headers, session)
-    # session_file = hf_hub_download(repo_id=civitai_repository, repo_type='dataset',
-    #                                filename='session.json', token=os.environ['HF_TOKEN'])
-    cfg_file = 'config.json'
-    with open(cfg_file, 'r', encoding='utf-8') as f:
-        session.cookies.update(json.load(f)['civitai_token'])
+    header_file = hf_hub_download(repo_id=civitai_repository, repo_type='dataset',
+                                   filename='header.json', token=os.environ['HF_TOKEN'])
+    session_file = hf_hub_download(repo_id=civitai_repository, repo_type='dataset',
+                                  filename='session.json', token=os.environ['HF_TOKEN'])
+    # with open(header_file, 'r', encoding='utf-8') as f:
+    #     session = get_requests_session(max_retries, timeout, verify, json.load(f)['headers'], session)
+    session = get_requests_session(max_retries, timeout, verify, None, session)
+    with open(session_file, 'r', encoding='utf-8') as f:
+        session.cookies.update(json.load(f)['cookies'])
 
     return session
 

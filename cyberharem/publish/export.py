@@ -9,6 +9,7 @@ from textwrap import dedent
 from typing import Optional
 from pathlib import Path
 import glob
+from hbutils.system import TemporaryDirectory
 
 import numpy as np
 import pandas as pd
@@ -378,9 +379,9 @@ def export_workdir(workdir: str, export_dir: str, n_repeats: int = 2,
             print(f'# Lora of {name}', file=f)
             print('', file=f)
 
-            print('This model is trained with [kohya-scripts](https://github.com/kohya-ss/sd-scripts). '
+            print('This model is trained with [kohyass-scripts](https://github.com/kohya-ss/sd-scripts). '
                   'And the auto-training framework is maintained by '
-                  '[DeepGHS Team](https://huggingface.co/deepghs).'
+                  '[DeepGHS Team](https://huggingface.co/deepghs). '
                   'And the WebUI Panel provide by [LittleAppleWebUI](https://github.com/LittleApple-fp16/LittleAppleWebUI)', file=f)
             print('', file=f)
 

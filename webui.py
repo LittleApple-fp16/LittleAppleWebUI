@@ -175,7 +175,7 @@ def download_illust(i_name, i_source, i_maxsize=None):
         kemono_arg["retry"] = 3
         if cfg.get('proxie_enabled', False):
             kemono_arg["proxie"] = {
-                'http': 'http://' + cfg.get('proxie_ip', None) + ':' + cfg.get('proxie_host', None)
+                'http': 'http://' + cfg.get('proxie_ip', None) + ':' + cfg.get('proxie_port', None)
             }
         if 0 in i_source:
             logger.info("[信息] - 画师内容获取需要一段时间")
@@ -278,7 +278,7 @@ async def illu_getter(pic):
     global output_cache
     gr.Info("开始获取画师信息")
     if cfg.get('proxie_enabled', False):
-        proxies = 'http://'+cfg.get('proxie_ip', None)+':'+cfg.get('proxie_host', None)
+        proxies = 'http://'+cfg.get('proxie_ip', None)+':'+cfg.get('proxie_port', None)
     else:
         proxies = None
     async with Network(proxies=proxies) as client:
@@ -836,24 +836,17 @@ def illu_source_limit(i_source):
     return updates
 
 
-def pipeline_type_limit(evt: gr.SelectData):
-    updates = {}
-    if evt.index == 1:
-        updates[pipeline_toml_presets] = gr.update(visible=True)
-    else:
-        updates[pipeline_toml_presets] = gr.update(visible=False)
-    return updates
-
-
-def save_settings(p_token, f_cookie, c_token, pro_ip, pro_host, pro_enabled, theme):
+def save_settings(p_token, f_cookie, c_token, pro_ip, pro_port, pro_enabled, ver_enabled, thm_light, thm_style):
     global cfg
     cfg['pixiv_token'] = p_token
     cfg['fanbox_cookie'] = f_cookie
     cfg['civitai_token'] = c_token
     cfg['proxie_ip'] = pro_ip
-    cfg['proxie_host'] = pro_host
+    cfg['proxie_port'] = pro_port
     cfg['proxie_enabled'] = pro_enabled
-    cfg['theme'] = theme
+    cfg['verify_enabled'] = ver_enabled
+    cfg['theme_light'] = 'Light' if thm_light == '亮色' else 'Dark'
+    cfg['theme_style'] = thm_style if not thm_style == '默认' else 'Default'
     with open('config.json', 'w') as f:
         json.dump(cfg, f, ensure_ascii=False, indent=4)
     gr.Info("设置已保存")
@@ -870,6 +863,22 @@ def load_settings():
     else:
         cfg = {}
     gr.Info("设置已读取")
+
+
+def load_css():
+    global cfg
+    css_files = []
+    merged_css = ""
+    if cfg.get('theme_style', 'Default') == 'NovelAI':
+        css_files.append('style/novel.css')
+    css_files.append('style/apple.css')
+    if css_files:
+        for css_file in css_files:
+            with open(css_file, "r") as f:
+                css_content = f.read()
+            merged_css += css_content
+    logger.success("已加载css")
+    return merged_css
 
 
 def pixiv_login():
@@ -893,7 +902,15 @@ def pixiv_login():
         logger.warning("[警告] - Pixiv登录失败，已尝试三次，请前往设置检查刷新令牌，并尝试重新登录")
 
 
-def pipeline_start(ch_names, train_type, toml_index):
+def pipeline_start_plora(ch_names):
+    return pipeline_start(ch_names, 0)
+
+
+def pipeline_start_lora(ch_names, toml_index):
+    return pipeline_start(ch_names, 1, toml_index)
+
+
+def pipeline_start(ch_names, train_type, toml_index=None):
     global output_cache
     global cfg
     bs = 4
@@ -915,15 +932,15 @@ def pipeline_start(ch_names, train_type, toml_index):
         else:
             save_path = "pipeline\\dataset\\_kohya\\" + ch_e + f"\\1_{ch_e}"
 ###
-#         source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
-#         source_init.attach(*actions).export(
-#             TextualInversionExporter(save_path)
-#         )
-# ###
-#         if not is_kohya:
-#             run_train_plora(ch_e, bs=bs, epoc=epoc, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
-#         else:
-#             run_train_lora(ch_e, bs=bs, epoch=epoc, toml_index=toml_index, is_pipeline=True)
+        source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+        source_init.attach(*actions).export(
+            TextualInversionExporter(save_path)
+        )
+###
+        if not is_kohya:
+            run_train_plora(ch_e, bs=bs, epoc=epoc, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
+        else:
+            run_train_lora(ch_e, bs=bs, epoch=epoc, toml_index=toml_index, is_pipeline=True)
 ###
 
         def huggingface(workdir: str, repository, revision, n_repeats, pretrained_model,
@@ -978,7 +995,7 @@ def pipeline_start(ch_names, train_type, toml_index):
                 )
 
         def civitai(repository, title, steps, epochs, draft, publish_time, allow_nsfw,
-                    version_name, force_create, no_ccip_check, session, is_pipeline=False, is_kohya=False):
+                    version_name, force_create, no_ccip_check, session, is_pipeline=False, is_kohya=False, verify=True):
             logging.try_init_root(logging.INFO)
             model_id = civitai_publish_from_hf(
                 repository, title,
@@ -986,7 +1003,7 @@ def pipeline_start(ch_names, train_type, toml_index):
                 publish_at=publish_time, allow_nsfw_images=allow_nsfw,
                 version_name=version_name, force_create_model=force_create,
                 no_ccip_check=no_ccip_check, session=session, is_pipeline=is_pipeline,
-                is_kohya=is_kohya, toml_index=toml_index
+                is_kohya=is_kohya, toml_index=toml_index, verify=verify,
             )
             url = f'https://civitai.com/models/{model_id}'
             if not draft:
@@ -1009,7 +1026,7 @@ def pipeline_start(ch_names, train_type, toml_index):
                 logger.error(" - 错误:", e)
                 raise e
         try:
-            civitai(repository=f'AppleHarem/{ch_e}', draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=cfg.get('civitai_token', ''), epochs=epoc, publish_time=None, steps=None, title=ch_e, version_name=None, is_pipeline=True, is_kohya=is_kohya)
+            civitai(repository=f'AppleHarem/{ch_e}', draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=None, epochs=epoc, publish_time=None, steps=None, title=f'{ch}/{ch_e}', version_name=None, is_pipeline=True, is_kohya=is_kohya, verify=cfg.get('verify_enabled', True))
         except Exception as e:
             logger.error(" - 错误:", e)
             raise e
@@ -1026,10 +1043,10 @@ def get_hf_token():
 def auto_crawler(chars_list, number):
     global crawler_clients
     crawler_clients["client_" + str(number)] = Client(f"AppleHarem/AppleBlock-{number}", hf_token=get_hf_token())
-    logger.info(f"[信息] - 创建{number}机")
+    logger.info(f"[信息] - 创建🐞{number}")
     crawler_clients["client_" + str(number)] = crawler_clients["client_" + str(number)].submit(get_hf_token(), chars_list, True, api_name="/crawlup")
-    logger.info(f"[信息] - 提交{number}机训练集任务")
-    gr.Info("["+str(number)+"机] 全自动训练集任务已提交")
+    logger.info(f"[信息] - 提交🐞{number}训练集任务")
+    gr.Info("[🐞"+str(number)+"] 全自动训练集任务已提交")
 
 
 def auto_crawler_status(number):
@@ -1041,9 +1058,9 @@ def auto_crawler_status(number):
             logger.debug(str(client.status()))
             logger.debug(str(client.result()))
         else:
-            gr.Warning(str(number) + "机未初始化")
+            gr.Warning("🐞"+str(number) + "尚未部署")
     else:
-        gr.Warning("未初始化任何远端")
+        gr.Warning("未部署任何🐞")
 
 
 def auto_crawler_done(msg):
@@ -1109,7 +1126,7 @@ if __name__ == "__main__":
     # 登录huggingface
     # hf_login(token=os.environ.get('HF_TOKEN'))
     # 主界面
-    with gr.Blocks(css="style.css", analytics_enabled=False) as iblock:
+    with gr.Blocks(css=load_css(), analytics_enabled=False) as iblock:
         quicksettings = gr.Row(elem_id="quicksettings")
         with quicksettings:
             dataset_dropdown = gr.Dropdown(ref_datasets(True), label="当前数据集", value=ref_datasets(True)[0], container=True, show_label=True, interactive=True, elem_id='dataset_dropbar')
@@ -1133,11 +1150,11 @@ if __name__ == "__main__":
                 # save_path = gr.Textbox(label='保存路径', value='dataset', placeholder='自动创建子文件夹')
                 download_button = gr.Button("获取图片", variant="primary", interactive=True)
                 with gr.Accordion("使用说明", open=False):
-                    gr.Markdown("对于单图站，填入要搜索的任何内容以获取对应标签图片\n"
-                                "对于自动图站源，必须填入一个角色名\n"
-                                "所有图站支持多内容顺序爬取，用半角逗号分隔，如\"铃兰,香风智乃\"\n"
-                                "保存的图片会以搜索内容自动生成一个数据集，获取完成后刷新数据集即可查看\n"
-                                "Pixiv源速度最慢、且质量最差")
+                    gr.Markdown("""对于单图站，填入要搜索的任何内容以获取对应标签图片\n
+                                对于自动图站源，必须填入一个角色名\n
+                                所有图站支持多内容顺序爬取，用半角逗号分隔，如\"铃兰,香风智乃\"\n
+                                保存的图片会以搜索内容自动生成一个数据集，获取完成后刷新数据集即可查看\n
+                                Pixiv源速度最慢、且质量最差""")
                 pre_rating.change(pre_rating_limit, [pre_rating], [download_button])
             with gr.Tab("画师"):
                 illu_name = gr.Textbox(label="画师名", placeholder="完整画师名")
@@ -1148,8 +1165,8 @@ if __name__ == "__main__":
                     illu_max_size = gr.Textbox(label="最大文件大小", info="MB", placeholder="不填写则无限制", value="16")
                 illu_button = gr.Button("获取作品", variant="primary")
                 with gr.Accordion("使用说明", open=False):
-                    gr.Markdown("仅支持pixiv fanbox 目前\n"
-                                "关于完整画师名：要写画师在pixiv对应的名字，不可以写fanbox上的英文名")
+                    gr.Markdown("""仅支持pixiv fanbox 目前\n
+                                关于完整画师名：要写画师在pixiv对应的名字，不可以写fanbox上的英文名""")
                 illu_get_source.change(illu_source_limit, [illu_get_source], [illu_button])
                 illu_getter_pic = gr.Image(type="filepath", label="到底是哪个画师?")
                 # illu_getter_button = gr.Button("获取画师名", interactive=True)
@@ -1166,30 +1183,30 @@ if __name__ == "__main__":
                     crop_trans_thre = gr.Slider(0.01, 1, label="容差阈值", value=0.7, step=0.01)
                     crop_trans_filter = gr.Slider(0, 10, label="羽化", value=5, step=1)
                     with gr.Accordion("使用说明", open=False):
-                        gr.Markdown("将数据集中的透明图片进行自适应剪裁。\n"
-                                    "不对运行结果中的内容进行操作。")
+                        gr.Markdown("""将数据集中的透明图片进行自适应剪裁。\n
+                                    不对运行结果中的内容进行操作。""")
                 with gr.Accordion("差分过滤"):
                     cluster_threshold = gr.Slider(0, 1, label="阈值", step=0.1, value=0.45, interactive=True)
                     cluster_button = gr.Button("开始处理", variant="primary")
                     with gr.Accordion("使用说明", open=False):
-                        gr.Markdown("差分检测：LPIPS（感知图像补丁相似性） ，全称为Learned Perceptual Image Patch "
-                                    "Similarity，是一种用于评估图像相似性的度量方法。基于深度学习模型，通过比较图像之间的深度特征评估它们的相似性\n "
-                                    "LPIPS使用了预训练的分类网络（如AlexNet或VGG）来提取图像的特征。然后计算两个图像特征之间的余弦距离，"
-                                    "并对所有层和空间维度的距离进行平均，可以得到一个值，用于表示两个图像之间的感知差异。\n"
-                                    "*会暂存去除差分后的图片结果"
-                                    "![cluster](markdown_res/lpips_full.plot.py.svg)")
+                        gr.Markdown("""差分检测：LPIPS（感知图像补丁相似性） ，全称为Learned Perceptual Image Patch 
+                                    Similarity，是一种用于评估图像相似性的度量方法。基于深度学习模型，通过比较图像之间的深度特征评估它们的相似性\n 
+                                    LPIPS使用了预训练的分类网络（如AlexNet或VGG）来提取图像的特征。然后计算两个图像特征之间的余弦距离，
+                                    并对所有层和空间维度的距离进行平均，可以得到一个值，用于表示两个图像之间的感知差异。\n
+                                    *会暂存去除差分后的图片结果
+                                    ![cluster](resource/lpips_full.plot.py.svg)""")
                 with gr.Accordion("人物分离"):
                     seg_scale = gr.Slider(32, 2048, label="缩放大小", info="图像传递给模型时的缩放尺寸", step=32, value=1024, interactive=True)
                     with gr.Accordion("使用说明", open=False):
-                        gr.Markdown("人物分离\n"
-                                    "*会暂存背景为透明的人物图片结果\n"
-                                    "查阅skytnt的[复杂动漫抠像](https://github.com/SkyTNT/anime-segmentation/)")
+                        gr.Markdown("""人物分离\n
+                                    *会暂存背景为透明的人物图片结果\n
+                                    查阅skytnt的[复杂动漫抠像](https://github.com/SkyTNT/anime-segmentation/)""")
                     seg_button = gr.Button("开始处理", variant="primary")
                 with gr.Accordion("快速操作说明", open=False):
-                    gr.Markdown("关于快速操作\n"
-                                "小苹果WebUI的设计理念是一个训练工具箱，用于执行轻量数据集的轻量操作，不支持过大数据集与部分极限任务\n"
-                                "因此部分快速操作的结果将暂存到内存中，部分快速操作的输入也会从内存结果中读取，而不是从源数据集中读取\n"
-                                "这使得你可以随心组装，选择自己需要的工作流程")
+                    gr.Markdown("""关于快速操作\n"
+                                小苹果WebUI的设计理念是一个训练工具箱，用于执行轻量数据集的轻量操作，不支持过大数据集与部分极限任务\n
+                                部分快速操作的结果将暂存到内存中，部分输入也会从内存结果中读取，而不是从源数据集中读取\n
+                                这使你可以在UI中选择自己需要的工作流程""")
                     # TODO 未来将支持输入输出端点可视化
             with gr.Tab("区域检测"):
                 # with gr.Accordion("人物检测"):
@@ -1201,7 +1218,7 @@ if __name__ == "__main__":
                 #     ccip_button = gr.Button("开始检测", variant="primary")
                 #     with gr.Accordion("使用说明", open=False):
                 #         gr.Markdown("角色检测：CCIP（对比角色图像预训练）从动漫角色图像中提取特征，计算两个角色之间的视觉差异，并确定两个图像是否"
-                #                     "描绘相同的角色。![ccip](markdown_res/ccip_full.plot.py.svg)"
+                #                     "描绘相同的角色。![ccip](resource/ccip_full.plot.py.svg)"
                 #                     "更多信息可查阅 [CCIP官方文档](https://deepghs.github.io/imgutils/main/api_doc/metrics/ccip.html).")
                 with gr.Accordion("面部检测"):
                     faced_level = gr.Checkbox(value=True, label="使用高精度", interactive=True)
@@ -1210,9 +1227,9 @@ if __name__ == "__main__":
                     faced_conf = gr.Slider(0.01, 1, label="检测阈值", interactive=True, value=0.25, step=0.01, info="置信度高于此值的检测结果会被返回")
                     faced_iou = gr.Slider(0.01, 1, label="重叠阈值", interactive=True, value=0.7, step=0.01, info="重叠区域高于此阈值将会被丢弃")
                     with gr.Accordion("使用说明", open=False):
-                        gr.Markdown("##面部检测"
-                                    "来自imgutils检测模块"
-                                    "###此功能会返回一个区域结果，而不是图片结果")
+                        gr.Markdown("""##面部检测
+                                    来自imgutils检测模块
+                                    ###此功能会返回一个区域结果，而不是图片结果""")
                     faced_button = gr.Button("开始检测", variant="primary")
                 with gr.Accordion("头部检测"):
                     headd_level = gr.Checkbox(value=True, label="使用高精度", interactive=True)
@@ -1220,50 +1237,50 @@ if __name__ == "__main__":
                     headd_conf = gr.Slider(0.01, 1, label="检测阈值", interactive=True, value=0.25, step=0.01, info="置信度高于此值的检测结果会被返回")
                     headd_iou = gr.Slider(0.01, 1, label="重叠阈值", interactive=True, value=0.7, step=0.01, info="重叠区域高于此阈值将会被丢弃")
                     with gr.Accordion("使用说明", open=False):
-                        gr.Markdown("##头部检测"
-                                    "来自imgutils检测模块"
-                                    "###此功能会返回一个区域结果，而不是图片结果")
+                        gr.Markdown("""##头部检测
+                                    来自imgutils检测模块
+                                    ###此功能会返回一个区域结果，而不是图片结果)""")
                     headd_button = gr.Button("开始检测", variant="primary")
                 with gr.Accordion("文本检测"):
                     with gr.Accordion("使用说明", open=False):
-                        gr.Markdown("文本检测\n"
-                                    "用ocr的方式检测文本的模块\n"
-                                    "此功能会返回一个区域结果，而不是图片结果\n"
-                                    "此功能结果质量差，不建议使用")
+                        gr.Markdown("""文本检测\n
+                                    用ocr的方式检测文本的模块\n
+                                    此功能会返回一个区域结果，而不是图片结果\n
+                                    此功能结果质量差，不建议使用""")
                     textd_button = gr.Button("开始检测", variant="primary")
                 with gr.Accordion("区域检测说明", open=False):
-                    gr.Markdown("此选项卡中的操作是检测操作\n"
-                                "可接受结果中的图像，将暂存区域信息\n")
+                    gr.Markdown("""此选项卡中的操作是检测操作\n
+                                可接受结果中的图像，将暂存区域信息\n""")
             with gr.Tab("区域处理"):
                 with gr.Accordion("区域填充"):
                     areaf_isRandom = gr.Checkbox(label="随机颜色", value=True, interactive=True)
                     areaf_color = gr.ColorPicker(label="自定义颜色", value="#00FF00", visible=not areaf_isRandom.value)
                     areaf_button = gr.Button("开始处理", variant="primary")
                     with gr.Accordion("使用说明", open=False):
-                        gr.Markdown("接收输出后的结果进行打码。\n"
-                                    "运行结果内有区域信息，才可以填充...")
+                        gr.Markdown("""接收输出后的结果进行打码。\n
+                                    运行结果内有区域信息，才可以填充...""")
                     areaf_isRandom.select(color_picker_ctrl, None, [areaf_color])
                 with gr.Accordion("区域模糊"):
                     areab_radius = gr.Slider(1, 20, label="模糊强度", value=4, interactive=True, step=1)
                     areab_button = gr.Button("开始处理", variant="primary")
                     with gr.Accordion("使用说明", open=False):
-                        gr.Markdown("接收输出后的结果进行打码。\n"
-                                    "运行结果内有区域信息，才可以模糊...")
+                        gr.Markdown("""接收输出后的结果进行打码。\n
+                                    运行结果内有区域信息，才可以模糊...""")
                 with gr.Accordion("区域剪裁"):
                     crop_hw_button = gr.Button("开始处理", variant="primary")
                     with gr.Accordion("使用说明", open=False):
-                        gr.Markdown("将运行结果中的区域进行剪裁。\n"
-                                    "运行结果内有区域信息，才可以剪裁...")
+                        gr.Markdown("""将运行结果中的区域进行剪裁。\n
+                                    运行结果内有区域信息，才可以剪裁...""")
             with gr.Tab("快捷工具"):
                 with gr.Accordion("快速镜像"):
                     mirror_pickup = gr.Button("选择文件夹", variant="primary")
                     with gr.Accordion("使用说明", open=False):
-                        gr.Markdown("可选择多个文件夹，直到手动取消\n"
-                                    "程序将自动帮你处理所有图像的镜像操作以及标签文件\n")
+                        gr.Markdown("""可选择多个文件夹，直到手动取消\n"
+                                    "程序将自动帮你处理所有图像的镜像操作以及标签文件\n""")
                     with gr.Accordion("快捷工具说明", open=False):
-                        gr.Markdown("此类工具部分是为kohya设计的\n"
-                                    "由于kohya数据集结构特殊，我们无法直接读取和处理kohya数据集的内容\n"
-                                    "此类工具大部分使用了os库，因此你可以用它们处理计算机上任何位置的内容")
+                        gr.Markdown("""此类工具部分是为kohya设计的\n
+                                    由于kohya数据集结构特殊，我们无法直接读取和处理kohya数据集的内容\n
+                                    此类工具大部分使用了os库，因此你可以用它们处理计算机上任何位置的内容""")
         with gr.Tab("打标器"):
             taggers = ["wd14", "mldanbooru", "json解析"]
             tagger_type = gr.Dropdown(taggers, value=taggers[0], label="打标器", allow_custom_value=False, interactive=True)
@@ -1284,9 +1301,9 @@ if __name__ == "__main__":
                 # ml_use_blacklist = gr.Checkbox(label="使用黑名单", value=True, interactive=True)
             with gr.Column(visible=tagger_type.value == taggers[2]) as tagger_anal_settings:
                 with gr.Accordion("使用说明", open=False):
-                    gr.Markdown("用此脚本获取的图片附有json文件\n"
+                    gr.Markdown("""用此脚本获取的图片附有json文件\n
                                 "使用此打标器以从中提取tag\n"
-                                "此功能不会检查图片，而是从所有可能的json文件中提取tag")
+                                "此功能不会检查图片，而是从所有可能的json文件中提取tag""")
                 anal_del_json = gr.Checkbox(value=False, label="删除json", interactive=True)
             use_blacklist = gr.Checkbox(label="使用黑名单", value=True, interactive=True)
             with gr.Column(visible=use_blacklist.value) as tagger_dropper_settings:
@@ -1303,40 +1320,56 @@ if __name__ == "__main__":
             use_blacklist.select(blacklist_settings_ctrl, None, [tagger_dropper_settings])
             drop_use_presets.select(custom_blacklist_ctrl, None, [drop_custom_setting])
         with gr.Tab("PLoRA训练"):
-            plora_min_step = gr.Textbox(label="最小步数", value='', placeholder='不填写将自动计算')
-            plora_epoch = gr.Slider(1, 100, label="Epoch", value=10)
-            plora_batch_size = gr.Slider(1, 64, label="Batch Size", value=4, step=1)
-            plora_train_button = gr.Button("开始训练", variant="primary")
-            with gr.Accordion("使用说明", open=False):
-                gr.Markdown("训练详细说明..什么的")
+            with gr.Tab("快速训练"):
+                plora_min_step = gr.Textbox(label="最小步数", value='', placeholder='不填写将自动计算')
+                plora_epoch = gr.Slider(1, 100, label="Epoch", value=10)
+                plora_batch_size = gr.Slider(1, 64, label="Batch Size", value=4, step=1)
+                plora_train_button = gr.Button("开始训练", variant="primary")
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("""训练详细说明..什么的""")
+            with gr.Tab("高级训练"):
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("soon...")
+            with gr.Tab("全自动训练") as tab_pipeline_plora:
+                pipeline_text_plora = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的模型就出现在c站了》", info="要求角色名 用,分隔")
+                pipeline_button_plora = gr.Button("开始全自动训练", variant="primary")
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("""《输入角色名然后你的模型就出现在c站了》\n
+                                需要在设置中设置c站token\n
+                                需要在计算机中添加环境变量: 键名 HF_TOKEN 值: 从登录的HuggingFace网站获取 在账号设置中创建访问令牌""")
         toml_presets = ['默认', '一杯哈萨姆', '琥珀青葉']
         with gr.Tab("LoRA训练"):
-            lora_epoch = gr.Slider(1, 100, label="Epoch", value=10)
-            lora_batch_size = gr.Slider(1, 64, label="Batch Size", value=1, step=1)
-            lora_toml_presets = gr.Radio(toml_presets, label="参数", info="通用化的参数预设", type="index", value="默认", interactive=True)
-            lora_train_button = gr.Button("开始训练", variant="primary")
-        with gr.Tab("质量验证"):
+            with gr.Tab("快速训练"):
+                lora_epoch = gr.Slider(1, 100, label="Epoch", value=10)
+                lora_batch_size = gr.Slider(1, 64, label="Batch Size", value=1, step=1)
+                lora_toml_presets = gr.Radio(toml_presets, label="参数", info="通用化的参数预设", type="index", value="默认", interactive=True)
+                lora_train_button = gr.Button("开始训练", variant="primary")
+            with gr.Tab("高级训练"):
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("soon...")
+            with gr.Tab("全自动训练") as tab_pipeline_lora:
+                pipeline_text_lora = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的模型就出现在c站了》", info="要求角色名 用,分隔")
+                pipeline_toml_presets = gr.Radio(toml_presets, label="参数", info="通用化的参数预设", type="index", value="默认", visible=False)
+                pipeline_button_lora = gr.Button("开始全自动训练", variant="primary")
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("""《输入角色名然后你的模型就出现在c站了》\n
+                                需要在设置中设置c站token\n
+                                需要在计算机中添加环境变量: 键名 HF_TOKEN 值: 从登录的HuggingFace网站获取 在账号设置中创建访问令牌""")
+        with gr.Tab("质量评估"):
             with gr.Accordion("使用说明", open=False):
                 gr.Markdown("soon...")
         with gr.Tab("上传权重"):
-            with gr.Accordion("权重合并", open=True):
+            with gr.Accordion("LoRA合并", open=True):
                 with gr.Column(elem_id="convert_lora_steps") as convert_lora_steps:
                     convert_step = gr.Dropdown(ref_runs(dataset_dropdown.value, True), value=ref_runs(dataset_dropdown.value, True)[0] if ref_runs(dataset_dropdown.value, True) else [], label="步数",
-                                               info="合并对应步数的权重文件", elem_id="convert_list", multiselect=False, interactive=True)
+                                               info="HCP可用,合并对应步数的权重文件", elem_id="convert_list", multiselect=False, interactive=True)
                     convert_ref_button = gr.Button("🔄", elem_id='convert_ref_button')
                 convert_weights_button = gr.Button("开始合并", variant="primary")
+            with gr.Accordion("权重拆解", open=True):
+                # 大模型权重拆解 sd 2 diffusers 格式
+                pass
             with gr.Accordion("使用说明", open=False):
                 gr.Markdown("上传权重到抱脸和C站 soon..")
-        with gr.Tab("全自动训练"):
-            pipeline_text = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的模型就出现在c站了》", info="要求角色名 用,分隔")
-            pipeline_type = gr.Radio(['PLoRA', 'LoRA'], label="训练类型", type="index", value="PLoRA", interactive=True)
-            pipeline_toml_presets = gr.Radio(toml_presets, label="参数", info="通用化的参数预设", type="index", value="默认", visible=False)
-            pipeline_button = gr.Button("开始全自动训练", variant="primary")
-            with gr.Accordion("使用说明", open=False):
-                gr.Markdown("《输入角色名然后你的模型就出现在c站了》\n"
-                            "需要在设置中设置c站token\n"
-                            "需要在计算机中添加环境变量: 键名 HF_TOKEN 值: 从登录的HuggingFace网站获取 在账号设置中创建访问令牌")
-            pipeline_type.select(pipeline_type_limit, None, [pipeline_toml_presets])
         with gr.Tab("全自动数据集"):
             with gr.Tab("1机"):
                 auto_crawl_1_chars = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的数据集就出现在抱脸了》", info="要求角色名 用,分隔")
@@ -1354,46 +1387,48 @@ if __name__ == "__main__":
                 auto_crawl_3_status = gr.Button("查询状态")
                 auto_crawl_3_number = gr.Textbox(value="3", visible=False)
             with gr.Accordion("使用说明", open=False):
-                gr.Markdown("《输入角色名然后你的数据集就出现在抱脸了》\n"
-                            "需要设置抱脸token\n"
-                            "你必须拥有组织的读写权限")
+                gr.Markdown("""《输入角色名然后你的数据集就出现在抱脸了》\n
+                            需要设置抱脸token\n
+                            你必须拥有组织的读写权限""")
         with gr.Tab("设置"):
             with gr.Tab("Pixiv"):
                 pixiv_token = gr.Textbox(label="刷新令牌", placeholder="不填写将无法访问Pixiv", interactive=True, value=cfg.get('pixiv_token', ''))
                 pixiv_get_token = gr.Button("前往查询", interactive=True)
                 with gr.Accordion("令牌说明", open=False):
-                    gr.Markdown("获取Pixiv图片需要刷新令牌\n"
-                                "用法：点击`前往获取`，将打开Pixiv网页，按F12启用开发者控制台，选择`网络/Network`，点击左侧第三个按钮`筛选器`，"
-                                "筛选`callback?`点击继续使用此账号登录，此时页面会跳转，开发者控制台会出现一条请求，点击它，进入`标头`"
-                                "复制`code=`后的内容，填入后台（黑窗口）按回车，后台将返回你的refresh token\n"
-                                "打开webui时会尝试自动登录，如果失败请尝试下方登录按钮，需要先填写刷新令牌并保存\n"
-                                "控制台中可以看到登录信息\n"
-                                "取消查询请在后台按ctrl+c")
+                    gr.Markdown("""获取Pixiv图片需要刷新令牌\n
+                                用法：点击`前往获取`，将打开Pixiv网页，按F12启用开发者控制台，选择`网络/Network`，点击左侧第三个按钮`筛选器`，
+                                筛选`callback?`点击继续使用此账号登录，此时页面会跳转，开发者控制台会出现一条请求，点击它，进入`标头`
+                                复制`code=`后的内容，填入后台（黑窗口）按回车，后台将返回你的refresh token\n
+                                打开webui时会尝试自动登录，如果失败请尝试下方登录按钮，需要先填写刷新令牌并保存\n
+                                控制台中可以看到登录信息\n
+                                取消查询请在后台按ctrl+c""")
                 # settings_list = [pixiv_token]
                 pixiv_manual_login = gr.Button("尝试登录", interactive=True)
             with gr.Tab("Fanbox"):
                 fanbox_cookie = gr.Textbox(label="Cookie", lines=13, placeholder="不填写将无法获取Fanbox内容", interactive=True, value=cfg.get('fanbox_cookie', ''))
                 fanbox_get_cookie = gr.Button("前往查询", interactive=True)
                 with gr.Accordion("Cookie说明", open=False):
-                    gr.Markdown("获取Fanbox图片需要Kemono网站Cookie\n"
-                                "Cookie格式：[{xxx},{x..}]，名为session的cookie\n"
-                                "具体操作：使用EditThisCookie浏览器扩展\n"
-                                "进入Kemono网站，导出cookie，将cookie粘贴到设置中，删除第一项和第三项，\n"
-                                "无需[]大括号，只保留名为session的cookie{xxx}即可")
+                    gr.Markdown("""获取Fanbox图片需要Kemono网站Cookie\n
+                                Cookie格式：[{xxx},{x..}]，名为session的cookie\n
+                                具体操作：使用EditThisCookie浏览器扩展\n
+                                进入Kemono网站，导出cookie，将cookie粘贴到设置中，删除第一项和第三项，\n
+                                无需[]大括号，只保留名为session的cookie{xxx}即可""")
             with gr.Tab("Civitai"):
                 civitai_token = gr.Textbox(label="Cookie", lines=13, placeholder="不填写无法自动上传c站", interactive=True, value=cfg.get('civitai_token', ''))
             with gr.Tab("Huggingface"):
                 hf_token_show = gr.Textbox(label="Token", value=get_hf_token(), info="Huggingface的token需要在环境变量中设置", interactive=False)
                 hf_token_ref = gr.Button("刷新token")
-            with gr.Tab("代理服务器"):
+            with gr.Tab("网络设置"):
                 proxie_ip = gr.Textbox(label="代理IP地址", placeholder="代理软件的IP地址", value=cfg.get('proxie_ip', ''))
-                proxie_host = gr.Textbox(label="代理端口", placeholder="代理软件中的端口", value=cfg.get('proxie_host', ''))
+                proxie_port = gr.Textbox(label="代理端口", placeholder="代理软件中的端口", value=cfg.get('proxie_port', ''))
                 proxie_enabled = gr.Checkbox(label="启用代理", interactive=True, value=cfg.get('proxie_enabled', False))
+                verify_enabled = gr.Checkbox(label="启用验证", info="SSL/TLS 证书验证", value=cfg.get('verify_enabled', True))
             with gr.Tab("界面设置"):
-                theme_select = gr.Dropdown(['亮色', '黑色'], label="主题颜色", interactive=True, info="需要重启", value=cfg.get('theme', '亮色'))
+                theme_light = gr.Radio(['亮色', '暗色'], label="颜色切换", interactive=True, info="需要重启", value='亮色' if cfg.get('theme_light', 'Light') == 'Light' else '暗色')
+                theme_style = gr.Dropdown(['默认', 'NovelAI', 'Soft'], label="界面主题", interactive=True, info="需要重启", value='默认' if cfg.get('theme_style', 'Default') == 'Default' else cfg.get('theme_style', 'Default'))
             setting_save_button = gr.Button("保存", interactive=True, variant="primary")
             with gr.Accordion("使用说明", open=False):
-                gr.Markdown("我只是个打酱油的...")
+                gr.Markdown("""###我只是个打酱油的...""")
         with gr.Column(elem_id="output"):
             message_output = gr.Textbox(label='运行结果', elem_id="message_output")
             save_output = gr.Button("💾", elem_id="save_output", interactive=False)
@@ -1406,8 +1441,9 @@ if __name__ == "__main__":
         auto_crawl_1_status.click(auto_crawler_status, [auto_crawl_1_number], [])
         auto_crawl_2_status.click(auto_crawler_status, [auto_crawl_2_number], [])
         auto_crawl_3_status.click(auto_crawler_status, [auto_crawl_3_number], [])
-        pipeline_button.click(pipeline_start, [pipeline_text, pipeline_type, pipeline_toml_presets], [message_output])
-        setting_save_button.click(save_settings, [pixiv_token, fanbox_cookie, civitai_token, proxie_ip, proxie_host, proxie_enabled, theme_select], [message_output])
+        pipeline_button_plora.click(pipeline_start_plora, [pipeline_text_plora], [message_output])
+        pipeline_button_lora.click(pipeline_start_lora, [pipeline_text_lora, pipeline_toml_presets], [message_output])
+        setting_save_button.click(save_settings, [pixiv_token, fanbox_cookie, civitai_token, proxie_ip, proxie_port, proxie_enabled, verify_enabled, theme_light, theme_style], [message_output])
         pixiv_manual_login.click(pixiv_login, [], [])
         pixiv_get_token.click(get_ref_token, [], [])
         fanbox_get_cookie.click(get_fanbox_cookie, [], [])
@@ -1443,6 +1479,6 @@ if __name__ == "__main__":
 
     # log.info(f"Server started at http://{args.host}:{args.port}")
     if sys.platform == "win32":
-        webbrowser.open(f"http://127.0.0.1:{args.port}" + ("?__theme=dark" if cfg.get('theme', '亮色') == '黑色' else ""))
+        webbrowser.open(f"http://{args.host}:{args.port}" + ("?__theme=dark" if cfg.get('theme_light', 'Light') == 'Dark' else ""))
     iblock.queue()
     iblock.launch(server_port=args.port, server_name=args.host, share=args.share)

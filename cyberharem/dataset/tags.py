@@ -15,10 +15,10 @@ basic_words = [
 ]
 
 generic_neg_words = [
-    ('worst quality, low quality', 1.4), ('zombie, sketch, interlocked fingers, comic', 1.1),
+    'EasyNegative', 'badhandv4', ('worst quality, low quality', 1.4), ('zombie, sketch, interlocked fingers, comic, mosaic censoring', 1.1),
     ('full body', 1.1), 'lowres', 'bad anatomy', 'bad hands', 'text', 'error', 'missing fingers', 'extra digit',
     'fewer digits', 'cropped', 'worst quality', 'low quality', 'normal quality', 'jpeg artifacts', 'signature',
-    'watermark', 'username', 'blurry', 'white border', ('english text, chinese text', 1.05),
+    'watermark', 'username', 'blurry', 'white border', 'lip', ('english text, chinese text', 1.05),
 ]
 
 
@@ -33,9 +33,10 @@ def _free_pos_words(generic_words, name, core_tags):
 def _bikini_pos_words(generic_words, name, core_tags):
     return [
         *generic_words,
-        ('night', 1.1),
-        ('starry sky', 1.1),
-        'beach',
+        ('day', 1.1),
+        ('cloud sky', 1.1),
+        'ocean',
+        'step in water',
         'beautiful detailed sky',
         ('extremely detailed background', 1.2),
         (name, 1.15),
@@ -44,7 +45,8 @@ def _bikini_pos_words(generic_words, name, core_tags):
         ('bikini', 1.3),
         *[key for key, _ in sorted(core_tags.items(), key=lambda x: -x[1])],
         'light smile',
-    ], generic_neg_words, 758691538, True
+        'closed eyes',
+    ], generic_neg_words, 3229771478, True
 
 
 def _nude_pos_words(generic_words, name, core_tags):
@@ -122,6 +124,37 @@ def _safe_maid_words(generic_words, name, core_tags):
     ], None, True
 
 
+def _safe_cheongsam_words(generic_words, name, core_tags):
+    return [
+        *generic_words,
+        ('china dress', 1.4),
+        ('chinese clothes', 1.2),
+        (name, 1.15),
+        *[key for key, _ in sorted(core_tags.items(), key=lambda x: -x[1])],
+    ], [
+        'nsfw', 'sexy', 'underwear', 'bra', 'fishnet', 'navel',
+        *generic_neg_words,
+    ], None, True
+
+
+def _safe_hanfu_words(generic_words, name, core_tags):
+    return [
+        *generic_words,
+        ('hanfu', 1.4),
+        ('chinese clothes', 1.2),
+        ('long sleeves', 1.1),
+        ('wide sleeves', 1.1),
+        'puffy sleeves',
+        'frills',
+        'qixiong ruqun',
+        (name, 1.15),
+        *[key for key, _ in sorted(core_tags.items(), key=lambda x: -x[1])],
+    ], [
+        'nsfw', 'sexy', 'underwear', 'bra', 'fishnet', 'navel',
+        *generic_neg_words,
+    ], None, True
+
+
 def _safe_yukata_words(generic_words, name, core_tags):
     return [
         *generic_words,
@@ -176,6 +209,8 @@ EXTRAS = [
     ('bikini', _bikini_pos_words),
     ('maid', _safe_maid_words),
     ('miko', _safe_miko_words),
+    ('cheongsam', _safe_cheongsam_words),
+    ('hanfu', _safe_hanfu_words),
     ('yukata', _safe_yukata_words),
     ('nude', _nude_pos_words),
     ('nude2', _nude_stand_words),

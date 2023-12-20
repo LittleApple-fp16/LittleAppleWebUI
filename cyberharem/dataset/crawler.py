@@ -155,6 +155,10 @@ def crawl_dataset_to_huggingface(
         if not repository:
             repository = f'AppleHarem/{get_alphabet_name(name)}'
 
+    hf_fs = get_hf_fs()
+    if hf_fs.exists(f'{repository}/.gitattributes'):
+        logging.warn(f'{repository} exists, skipped.')
+        return
     origin_source = get_main_source(source, no_r18, bg_color, no_monochrome_check, drop_multi, skip_preprocess)
     with TemporaryDirectory() as td:
         # save origin directory
