@@ -11,17 +11,19 @@ from .danbooru import ATFBooruSource, DanbooruSource, DanbooruLikeSource
 from .konachan import KonachanSource, KonachanNetSource, HypnoHubSource, LolibooruSource, XbooruSource, YandeSource, \
     Rule34Source, KonachanLikeSource
 from .pixiv import PixivSearchSource
+from . import GelbooruSource
 from .sankaku import SankakuSource
 from .wallhaven import WallHavenSource
 from .zerochan import ZerochanSource
 from ..model import ImageItem
 
-_PRESET_SITES = ('zerochan', 'anime_pictures')
+_PRESET_SITES = ('zerochan', 'gelbooru')
 _REGISTERED_SITE_SOURCES = {
-    # 'anime_pictures': AnimePicturesSource,  # HTTPError: 404 Client Error: Not Found for url
+    'anime_pictures': AnimePicturesSource,
     'atfbooru': ATFBooruSource,
     # 'sankaku': SankakuSource,  # still something wrong with sankaku source
     'danbooru': DanbooruSource,
+    'gelbooru': GelbooruSource,
     'hypnohub': HypnoHubSource,
     'konachan': KonachanSource,
     'konachan_net': KonachanNetSource,
