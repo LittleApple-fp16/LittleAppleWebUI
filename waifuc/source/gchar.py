@@ -17,13 +17,12 @@ from .wallhaven import WallHavenSource
 from .zerochan import ZerochanSource
 from ..model import ImageItem
 
-_PRESET_SITES = ('zerochan', 'gelbooru')
+_PRESET_SITES = ('zerochan', 'danbooru')
 _REGISTERED_SITE_SOURCES = {
     'anime_pictures': AnimePicturesSource,
     'atfbooru': ATFBooruSource,
     # 'sankaku': SankakuSource,  # still something wrong with sankaku source
     'danbooru': DanbooruSource,
-    'gelbooru': GelbooruSource,
     'hypnohub': HypnoHubSource,
     'konachan': KonachanSource,
     'konachan_net': KonachanNetSource,
