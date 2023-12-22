@@ -11,7 +11,6 @@ from .danbooru import ATFBooruSource, DanbooruSource, DanbooruLikeSource
 from .konachan import KonachanSource, KonachanNetSource, HypnoHubSource, LolibooruSource, XbooruSource, YandeSource, \
     Rule34Source, KonachanLikeSource
 from .pixiv import PixivSearchSource
-from . import GelbooruSource
 from .sankaku import SankakuSource
 from .wallhaven import WallHavenSource
 from .zerochan import ZerochanSource
