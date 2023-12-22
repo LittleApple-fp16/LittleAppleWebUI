@@ -1346,7 +1346,7 @@ if __name__ == "__main__":
                     gr.Markdown("soon...")
             with gr.Tab("全自动训练") as tab_pipeline_lora:
                 pipeline_text_lora = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的模型就出现在c站了》", info="要求角色名 用,分隔")
-                pipeline_toml_presets = gr.Radio(toml_presets, label="参数", info="通用化的参数预设", type="index", value="默认", visible=False)
+                pipeline_toml_presets = gr.Radio(toml_presets, label="参数", info="通用化的参数预设", type="index", value="默认")
                 pipeline_button_lora = gr.Button("开始全自动训练", variant="primary")
                 with gr.Accordion("使用说明", open=False):
                     gr.Markdown("""《输入角色名然后你的模型就出现在c站了》\n

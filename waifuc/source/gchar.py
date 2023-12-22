@@ -18,7 +18,7 @@ from ..model import ImageItem
 
 _PRESET_SITES = ('zerochan', 'anime_pictures')
 _REGISTERED_SITE_SOURCES = {
-    'anime_pictures': AnimePicturesSource,
+    # 'anime_pictures': AnimePicturesSource,  # HTTPError: 404 Client Error: Not Found for url
     'atfbooru': ATFBooruSource,
     # 'sankaku': SankakuSource,  # still something wrong with sankaku source
     'danbooru': DanbooruSource,
