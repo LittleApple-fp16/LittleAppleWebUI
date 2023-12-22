@@ -928,9 +928,9 @@ def pipeline_start(ch_names, train_type, toml_index=None):
         ch = ch.replace(' ', '_')
         ch_e = ''.join([r['hepburn']for r in riyu.convert(re.sub(r'[^\w\s()]', '', ''.join([word if not (u'\u4e00' <= word <= u'\u9fff') else lazy_pinyin(ch)[i] for i, word in enumerate(ch)])))]).replace(' ', '_')
         if not is_kohya:
-            save_path = "pipeline\\dataset\\" + ch_e
+            save_path = f"pipeline\\dataset\\{ch_e}"
         else:
-            save_path = "pipeline\\dataset\\_kohya\\" + ch_e + f"\\1_{ch_e}"
+            save_path = f"pipeline\\dataset\\_kohya\\{ch_e}\\1_{ch_e}"
 ###
         source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
         source_init.attach(*actions).export(
@@ -1011,27 +1011,24 @@ def pipeline_start(ch_names, train_type, toml_index=None):
             else:
                 logging.info(f'Draft created, it can be seed at {url} .')
 
-        # huggingface(workdir='pipeline\\runs\\' + ch_e, repository=None, n_repeats=3, pretrained_model=_DEFAULT_INFER_MODEL, width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
-        # rehf(repository=ch_e, n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
-        # civitai(repository=ch_e, draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=cfg.get('civitai_token', ''), epochs=None, publish_time=None, steps=None, title=None, version_name=None)
-        # try:
-        #     huggingface(workdir='pipeline/runs/' + ('_kohya/' if is_kohya else '') + ch_e, repository=None, n_repeats=3, pretrained_model=_DEFAULT_INFER_MODEL, width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
-        # except Exception as e:
-        #     logger.error(" - 错误:", e)
-        #     raise e
-        if not is_kohya:
-            try:
-                rehf(repository=f'AppleHarem/{ch_e}', n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
-            except Exception as e:
-                logger.error(" - 错误:", e)
-                raise e
+        try:
+            huggingface(workdir='pipeline/runs/' + ('_kohya/' if is_kohya else '') + ch_e, repository=None, n_repeats=3, pretrained_model=_DEFAULT_INFER_MODEL, width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
+        except Exception as e:
+            logger.error(" - 错误:", e)
+            raise e
+        # if not is_kohya:
+        #     try:
+        #         rehf(repository=f'AppleHarem/{ch_e}', n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
+        #     except Exception as e:
+        #         logger.error(" - 错误:", e)
+        #         raise e
         try:
             civitai(repository=f'AppleHarem/{ch_e}', draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=None, epochs=epoc, publish_time=None, steps=None, title=f'{ch}/{ch_e}', version_name=None, is_pipeline=True, is_kohya=is_kohya, verify=cfg.get('verify_enabled', True))
         except Exception as e:
             logger.error(" - 错误:", e)
             raise e
         gr.Info(f"[{ch}]" + " 全自动训练完成")
-        logger.success("已完成"+ch+"角色上传")
+        logger.success(" - 完成: 已完成"+ch+"角色上传")
     gr.Info("所有全自动训练任务完成")
     return get_output_status(output_cache)+"所有任务完成"
 

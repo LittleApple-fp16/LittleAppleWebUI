@@ -882,7 +882,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
             5. Individuals who finds the generated image content offensive to their values.
             6. Individuals who feel that writing a WebUI is meaningless or impatient.
             """
-            model_name = model_name or try_find_title(char_name, game_name) or \
+            model_name = try_find_title(char_name, game_name) or model_name or \
                          try_get_title_from_repo(repo) or trigger_word.replace('_', ' ') or get_ch_name(source)
             # if not force_create_model:
             #     try:
@@ -1153,7 +1153,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                         5. Individuals who finds the generated image content offensive to their values.
                         6. Individuals who feel that writing a WebUI is meaningless or impatient.
                         """
-            model_name = model_name or try_find_title(char_name, game_name) or \
+            model_name = try_find_title(char_name, game_name) or model_name or \
                          try_get_title_from_repo(repo) or trigger_word.replace('_', ' ')
             model_id = None
             char_name = ch_name
