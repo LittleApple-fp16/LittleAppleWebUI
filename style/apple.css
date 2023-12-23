@@ -3,8 +3,7 @@
     min-width: 2.2em !important;
     height: 2.4em;
     position: relative;
-    top: 34px;
-    right: 15px;
+    top: 1.9em;
 }
 
 #refresh_reps {
@@ -12,8 +11,7 @@
     min-width: 2.2em !important;
     height: 2.4em;
     position: relative;
-    top: 34px;
-    right: 15px;
+    top: 1.9em;
 }
 
 #convert_ref_button {
@@ -21,8 +19,7 @@
     min-width: 2.2em !important;
     height: 2.4em;
     position: relative;
-    top: 30px;
-    right: 6px;
+    top: 1.9em;
 }
 
 #dataset_dropbar {
@@ -37,6 +34,10 @@
 
 #dataset_dropbar div.wrap.wrap.wrap.wrap {
     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+#quicksettings {
+	gap: 0px;
 }
 
 #quicksettings>div {

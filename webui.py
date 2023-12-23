@@ -331,6 +331,7 @@ def three_stage(dataset_name, rep_name=None):
     if not dataset_name.endswith(' (kohya)'):
         if dataset_name.endswith("_processed"):
             process_dir = f"dataset/{dataset_name}"
+            gr.Warning("你正在覆盖此数据集")
         else:
             process_dir = f"dataset/{dataset_name}_processed"
         local_source = LocalSource(f"dataset/{dataset_name}")
@@ -338,17 +339,81 @@ def three_stage(dataset_name, rep_name=None):
             ThreeStageSplitAction(),
         ).export(TextualInversionExporter(process_dir, True))
     else:
-        if re.search(r'\d+_(.*)', rep_name) == 'processed':
-            pass
         local_source = LocalSource(f'dataset/_kohya/{dataset_name.replace(" (kohya)", "")}/{rep_name}')
-        repeat = int(re.search(r'(\d+)_.*', rep_name).group(1)//2)
+        repeat = int(re.search(r'(\d+)_.*', rep_name).group(1))//2
+        if re.search(r'\d+_(.*)', rep_name).group(1) == 'processed':
+            gr.Warning("你正在覆盖此循环")
         local_source.attach(
             ThreeStageSplitAction(),
         ).export(TextualInversionExporter(f'dataset/_kohya/{dataset_name.replace(" (kohya)", "")}/{str(repeat) if repeat != 0 else str(1)}_processed', True))
 
     gr.Info("三阶分割已结束")
     output_cache = []
-    return "已保存至"+process_dir+"文件夹"
+    return "操作结束 | "+"上次操作: 三阶分割"
+
+
+def three_stage_pickup():
+    global output_cache
+    gr.Info("选择包含图像的文件夹")
+    root = tk.Tk()
+    root.withdraw()
+    pths = []
+    while True:
+        pth = filedialog.askdirectory()
+        if pth:
+            pths.append(os.path.abspath(pth))
+        else:
+            break
+    gr.Info("三阶分割开始处理")
+    for i_pth in pths:
+        output_folder = i_pth + '_3stage'
+        os.makedirs(output_folder, exist_ok=False)
+        local_source = LocalSource(i_pth)
+        local_source.attach(
+            ThreeStageSplitAction(),
+        ).export(TextualInversionExporter(output_folder, True))
+    gr.Info("三阶分割已结束")
+    output_cache = []
+    return "操作结束 | " + "上次操作: 三阶分割"
+
+
+def mirror_process():
+    img_count = 0
+    tag_count = 0
+    gr.Info("选择包含图像的文件夹")
+    root = tk.Tk()
+    root.withdraw()
+    pths = []
+    while True:
+        pth = filedialog.askdirectory()
+        if pth:
+            pths.append(os.path.abspath(pth))
+        else:
+            break
+    gr.Info("快速镜像开始处理")
+    for i_pth in pths:
+        output_folder = i_pth + '_mirror'
+        os.makedirs(output_folder, exist_ok=False)
+        for filename in tqdm(os.listdir(i_pth), file=sys.stdout, desc=" - 快速镜像开始处理", ascii="░▒█"):
+            if filename.endswith(".jpg") or filename.endswith(".png") or filename.endswith(".jpeg"):
+                img_path = os.path.join(i_pth, filename)
+                txt_file = os.path.splitext(img_path)[0] + ".txt"
+                json_file = os.path.splitext(img_path)[0] + ".json"
+                img = cv2.imread(img_path)
+                img_mirror = cv2.flip(img, 1)
+                cv2.imwrite(os.path.join(output_folder, filename), img_mirror)
+                img_count = img_count + 1
+                # tag
+                if os.path.isfile(txt_file):
+                    shutil.copy(txt_file, os.path.join(output_folder, os.path.basename(txt_file)))
+                    tag_count = tag_count + 1
+                if os.path.isfile(json_file):
+                    shutil.copy(json_file, os.path.join(output_folder, os.path.basename(json_file)))
+                    tag_count = tag_count + 1
+    logger.success("快速镜像处理完成，输出位置与源文件夹位置相同")
+    gr.Info("快速镜像处理完成")
+    return get_output_status(output_cache)+"处理完毕, 共处理" + str(img_count) + "张图片, " + str(tag_count) + "个tag文件"
+
 
 # def person_detect(dataset_name, level, version, max_infer_size, conf_threshold, iou_threshold):
 #     global output_cache
@@ -666,9 +731,9 @@ def tagger_chooser_ctrl(evt: gr.SelectData):  # 此方法使用全局变量
     return updates
 
 
-def blacklist_settings_ctrl(evt: gr.SelectData):
+def blacklist_settings_ctrl(use_black):
     updates = {}
-    if evt.selected:
+    if use_black:
         updates[tagger_dropper_settings] = gr.update(visible=True)
     else:
         updates[tagger_dropper_settings] = gr.update(visible=False)
@@ -686,28 +751,31 @@ def kohya_rep_ctrl(evt: gr.SelectData):
     return updates
 
 
-def custom_blacklist_ctrl(evt: gr.SelectData):
-    if evt.selected:
-        dropper_update = {globals()[f"drop_custom_setting"]: gr.update(visible=False)}
+def custom_blacklist_ctrl(use_presets):
+    updates = {}
+    if use_presets:
+        updates[drop_custom_setting] = gr.update(visible=False)
     else:
-        dropper_update = {globals()[f"drop_custom_setting"]: gr.update(visible=True)}
-    return dropper_update
+        updates[drop_custom_setting] = gr.update(visible=True)
+    return updates
 
 
 def pixiv_setting_ctrl(evt: gr.SelectData):
+    updates = {}
     if evt.index == 1:
-        update = {globals()[f"pixiv_settings"]: gr.update(visible=True)}
+        updates[pixiv_settings] = gr.update(visible=True)
     else:
-        update = {globals()[f"pixiv_settings"]: gr.update(visible=False)}
-    return update
+        updates[pixiv_settings] = gr.update(visible=False)
+    return updates
 
 
-def color_picker_ctrl(evt: gr.SelectData):
-    if evt.selected:
-        update = {globals()[f"areaf_color"]: gr.update(visible=False)}
+def color_picker_ctrl(is_random):
+    updates = {}
+    if is_random:
+        updates[areaf_color] = gr.update(visible=False)
     else:
-        update = {globals()[f"areaf_color"]: gr.update(visible=True)}
-    return update
+        updates[areaf_color] = gr.update(visible=True)
+    return updates
 
 
 def save_output_ctrl():
@@ -719,26 +787,32 @@ def save_output_ctrl():
     return update
 
 
-def saving_output(dataset_name):
+def saving_output(dataset_name, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     count = 0
-    if dataset_name.endswith("_processed"):
-        process_dir = f"dataset/{dataset_name}"
+    if dataset_name.endswith(' (kohya)'):
+        repeat = int(re.search(r'(\d+)_.*', rep_name).group(1))//2
+        process_dir = f'dataset/_kohya/{dataset_name.replace(" (kohya)", "")}/{str(repeat) if repeat != 0 else str(1)}_processed'
+        if os.path.exists(process_dir):
+            gr.Warning(f"你正在覆盖循环{os.path.basename(process_dir)}")
     else:
-        process_dir = f"dataset/{dataset_name}_processed"
+        if dataset_name.endswith("_processed"):
+            process_dir = f"dataset/{dataset_name}"
+            gr.Warning("你正在覆盖此数据集")
+        else:
+            process_dir = f"dataset/{dataset_name}_processed"
     if has_image(output_cache):
         gr.Info("开始保存运行结果")
         os.makedirs(process_dir, exist_ok=True)
         anyfiles = os.listdir(process_dir)
-        # print(" - 开始保存运行结果")
         for anyfile in anyfiles:
             os.remove(f"{process_dir}/{anyfile}")
-        for i, sv in enumerate(tqdm(output_cache, file=sys.stdout, desc=" - 开始保存运行结果", ascii="░▒█")):
+        for i, sv in enumerate(tqdm(output_cache, file=sys.stdout, desc=" - 开始保存运行结果")):
             sv.save(f"{process_dir}/{dataset_name}_{i+1}.png")
             count = count+1
-        gr.Info("已保存"+str(count)+" 张图像至"+process_dir+"数据集")
+        gr.Info("已保存"+str(count)+" 张图像至"+process_dir)
         output_cache = []
-        return "已保存 "+str(count)+" 张图像至"+process_dir+"数据集"
+        return "已保存 "+str(count)+" 张图像至"+process_dir+" | 上次操作: 保存运行结果"
     else:
         gr.Warning("无法保存: 运行结果内没有图像")
 
@@ -909,9 +983,9 @@ def load_css():
     global cfg
     css_files = []
     merged_css = ""
+    css_files.append('style/apple.css')
     if cfg.get('theme_style', 'Default') == 'NovelAI':
         css_files.append('style/novel.css')
-    css_files.append('style/apple.css')
     if css_files:
         for css_file in css_files:
             with open(css_file, "r") as f:
@@ -996,7 +1070,7 @@ def pipeline_start(ch_names, train_type, toml_index=None):
             from pathlib import Path
             logging.try_init_root(logging.INFO)
             with TemporaryDirectory() as workdir:
-                logging.info(f'Downloading models for {workdir!r} ...')
+                logging.info(f'正在下载{workdir!r}模型...')
                 hf_fs = cyber_get_hf_fs()
                 for f in tqdm(hf_fs.glob(f'{repository}/*/raw/*')):
                     rel_file = Path(os.path.relpath(f, repository)).as_posix()
@@ -1008,7 +1082,7 @@ def pipeline_start(ch_names, train_type, toml_index=None):
                         local_file
                     )
 
-                logging.info(f'Regenerating tags for {workdir!r} ...')
+                logging.info(f'正在为{workdir!r}重新生成标签...')
                 pt_name, _ = find_steps_in_workdir(workdir)
                 game_name = pt_name.split('_')[-1]
                 name = '_'.join(pt_name.split('_')[:-1])
@@ -1106,44 +1180,6 @@ def auto_crawler_done(msg):
     gr.Info(msg)
 
 
-def mirror_process():
-    img_count = 0
-    tag_count = 0
-    gr.Info("选择包含图像的文件夹")
-    root = tk.Tk()
-    root.withdraw()
-    pths = []
-    while True:
-        pth = filedialog.askdirectory()
-        if pth:
-            pths.append(os.path.abspath(pth))
-        else:
-            break
-    gr.Info("快速镜像开始处理")
-    for i_pth in pths:
-        output_folder = i_pth + '_mirror'
-        os.makedirs(output_folder, exist_ok=False)
-        for filename in tqdm(os.listdir(i_pth), file=sys.stdout, desc=" - 快速镜像开始处理", ascii="░▒█"):
-            if filename.endswith(".jpg") or filename.endswith(".png") or filename.endswith(".jpeg"):
-                img_path = os.path.join(i_pth, filename)
-                txt_file = os.path.splitext(img_path)[0] + ".txt"
-                json_file = os.path.splitext(img_path)[0] + ".json"
-                img = cv2.imread(img_path)
-                img_mirror = cv2.flip(img, 1)
-                cv2.imwrite(os.path.join(output_folder, filename), img_mirror)
-                img_count = img_count + 1
-                # tag
-                if os.path.isfile(txt_file):
-                    shutil.copy(txt_file, os.path.join(output_folder, os.path.basename(txt_file)))
-                    tag_count = tag_count + 1
-                if os.path.isfile(json_file):
-                    shutil.copy(json_file, os.path.join(output_folder, os.path.basename(json_file)))
-                    tag_count = tag_count + 1
-    logger.success("快速镜像处理完成，输出位置与源文件夹位置相同")
-    gr.Info("快速镜像处理完成")
-    return get_output_status(output_cache)+"处理完毕, 共处理" + str(img_count) + "张图片, " + str(tag_count) + "个tag文件"
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="127.0.0.1")
@@ -1217,9 +1253,7 @@ if __name__ == "__main__":
             #     fast_tag = gr.Textbox(label="Tag", placeholder="aaa,bbb|ccc,ddd", value='')
             #     fast_button = gr.Button("开始获取", variant="primary", interactive=True)
         with gr.Tab("数据增强"):
-            with gr.Tab("快速操作"):
-                with gr.Accordion("三阶分割"):
-                    stage_button = gr.Button("开始处理", variant="primary")
+            with gr.Tab("图像处理"):
                 with gr.Accordion("自适应剪裁"):
                     crop_trans_thre = gr.Slider(0.01, 1, label="容差阈值", value=0.7, step=0.01)
                     crop_trans_filter = gr.Slider(0, 10, label="羽化", value=5, step=1)
@@ -1244,11 +1278,11 @@ if __name__ == "__main__":
                                     *会暂存背景为透明的人物图片结果\n
                                     查阅skytnt的[复杂动漫抠像](https://github.com/SkyTNT/anime-segmentation/)""")
                     seg_button = gr.Button("开始处理", variant="primary")
-                with gr.Accordion("快速操作说明", open=False):
-                    gr.Markdown("""关于快速操作\n"
+                with gr.Accordion("图像处理说明", open=False):
+                    gr.Markdown("""关于图像处理功能\n
                                 小苹果WebUI的设计理念是一个训练工具箱，用于执行轻量数据集的轻量操作，不支持过大数据集与部分极限任务\n
-                                部分快速操作的结果将暂存到内存中，部分输入也会从内存结果中读取，而不是从源数据集中读取\n
-                                这使你可以在UI中选择自己需要的工作流程""")
+                                部分处理结果将暂存到内存中，即`运行结果`区域，部分输入也会从运行结果中读取，而不是从源数据集中读取\n
+                                这使你可以在UI中快速搭配每个数据集需要的工作流程""")
                     # TODO 未来将支持输入输出端点可视化
             with gr.Tab("区域检测"):
                 # with gr.Accordion("人物检测"):
@@ -1269,9 +1303,9 @@ if __name__ == "__main__":
                     faced_conf = gr.Slider(0.01, 1, label="检测阈值", interactive=True, value=0.25, step=0.01, info="置信度高于此值的检测结果会被返回")
                     faced_iou = gr.Slider(0.01, 1, label="重叠阈值", interactive=True, value=0.7, step=0.01, info="重叠区域高于此阈值将会被丢弃")
                     with gr.Accordion("使用说明", open=False):
-                        gr.Markdown("""##面部检测
-                                    来自imgutils检测模块
-                                    ###此功能会返回一个区域结果，而不是图片结果""")
+                        gr.Markdown("""面部检测\n
+                                    来自imgutils检测模块\n
+                                    此功能会返回一个区域结果，而不是图片结果""")
                     faced_button = gr.Button("开始检测", variant="primary")
                 with gr.Accordion("头部检测"):
                     headd_level = gr.Checkbox(value=True, label="使用高精度", interactive=True)
@@ -1279,9 +1313,9 @@ if __name__ == "__main__":
                     headd_conf = gr.Slider(0.01, 1, label="检测阈值", interactive=True, value=0.25, step=0.01, info="置信度高于此值的检测结果会被返回")
                     headd_iou = gr.Slider(0.01, 1, label="重叠阈值", interactive=True, value=0.7, step=0.01, info="重叠区域高于此阈值将会被丢弃")
                     with gr.Accordion("使用说明", open=False):
-                        gr.Markdown("""##头部检测
-                                    来自imgutils检测模块
-                                    ###此功能会返回一个区域结果，而不是图片结果)""")
+                        gr.Markdown("""头部检测\n
+                                    来自imgutils检测模块\n
+                                    此功能会返回一个区域结果，而不是图片结果""")
                     headd_button = gr.Button("开始检测", variant="primary")
                 with gr.Accordion("文本检测"):
                     with gr.Accordion("使用说明", open=False):
@@ -1301,7 +1335,7 @@ if __name__ == "__main__":
                     with gr.Accordion("使用说明", open=False):
                         gr.Markdown("""接收输出后的结果进行打码。\n
                                     运行结果内有区域信息，才可以填充...""")
-                    areaf_isRandom.select(color_picker_ctrl, None, [areaf_color])
+                    areaf_isRandom.select(color_picker_ctrl, [areaf_isRandom], [areaf_color])
                 with gr.Accordion("区域模糊"):
                     areab_radius = gr.Slider(1, 20, label="模糊强度", value=4, interactive=True, step=1)
                     areab_button = gr.Button("开始处理", variant="primary")
@@ -1313,13 +1347,16 @@ if __name__ == "__main__":
                     with gr.Accordion("使用说明", open=False):
                         gr.Markdown("""将运行结果中的区域进行剪裁。\n
                                     运行结果内有区域信息，才可以剪裁...""")
-            with gr.Tab("快捷工具"):
+            with gr.Tab("快速操作"):
+                with gr.Accordion("三阶分割"):
+                    stage_button = gr.Button("数据集处理", variant="primary")
+                    stage_pickup = gr.Button("批量选择", variant="primary")
                 with gr.Accordion("快速镜像"):
-                    mirror_pickup = gr.Button("选择文件夹", variant="primary")
+                    mirror_pickup = gr.Button("批量选择", variant="primary")
                     with gr.Accordion("使用说明", open=False):
-                        gr.Markdown("""可选择多个文件夹，直到手动取消\n"
-                                    "程序将自动帮你处理所有图像的镜像操作以及标签文件\n""")
-                    with gr.Accordion("快捷工具说明", open=False):
+                        gr.Markdown("""可选择多个文件夹，直到手动取消\n
+                                    程序将自动帮你处理所有图像的镜像操作以及标签文件\n""")
+                    with gr.Accordion("快速操作说明", open=False):
                         gr.Markdown("""此类工具部分是为kohya设计的\n
                                     由于kohya数据集结构特殊，我们无法直接读取和处理kohya数据集的内容\n
                                     此类工具大部分使用了os库，因此你可以用它们处理计算机上任何位置的内容""")
@@ -1344,8 +1381,8 @@ if __name__ == "__main__":
             with gr.Column(visible=tagger_type.value == taggers[2]) as tagger_anal_settings:
                 with gr.Accordion("使用说明", open=False):
                     gr.Markdown("""用此脚本获取的图片附有json文件\n
-                                "使用此打标器以从中提取tag\n"
-                                "此功能不会检查图片，而是从所有可能的json文件中提取tag""")
+                                使用此打标器以从中提取tag\n
+                                此功能不会检查图片，而是从所有可能的json文件中提取tag""")
                 anal_del_json = gr.Checkbox(value=False, label="删除json", interactive=True)
             use_blacklist = gr.Checkbox(label="使用黑名单", value=True, interactive=True)
             with gr.Column(visible=use_blacklist.value) as tagger_dropper_settings:
@@ -1357,10 +1394,8 @@ if __name__ == "__main__":
             tagger_button = gr.Button("打标", variant="primary")
             # tagger_type.select(tagger_chooser_ctrl, None, [globals()[f'tagger_{("dropper" if tagger == "标签黑名单" else tagger)}_settings'] for tagger in taggers])
             tagger_type.select(tagger_chooser_ctrl, None, [globals()[f'tagger_{("anal" if tagger == "json解析" else tagger)}_settings'] for tagger in taggers])
-            # wd14_use_blacklist.select(blacklist_settings_ctrl, None, [tagger_dropper_settings])
-            # ml_use_blacklist.select(blacklist_settings_ctrl, None, [tagger_dropper_settings])
-            use_blacklist.select(blacklist_settings_ctrl, None, [tagger_dropper_settings])
-            drop_use_presets.select(custom_blacklist_ctrl, None, [drop_custom_setting])
+            use_blacklist.select(blacklist_settings_ctrl, [use_blacklist], [tagger_dropper_settings])
+            drop_use_presets.select(custom_blacklist_ctrl, [drop_use_presets], [drop_custom_setting])
         with gr.Tab("PLoRA训练"):
             with gr.Tab("快速训练"):
                 plora_min_step = gr.Textbox(label="最小步数", value='', placeholder='不填写将自动计算')
@@ -1497,6 +1532,7 @@ if __name__ == "__main__":
         ref_datasets_button.click(ref_datasets, [], [dataset_dropdown])
         ref_rep_button.click(ref_kohya_rep, [dataset_dropdown], [kohya_rep_dropdown])
         stage_button.click(three_stage, [dataset_dropdown, kohya_rep_dropdown], [message_output])
+        stage_pickup.click(three_stage_pickup, [], [message_output])
         drop_ref_button.click(ref_customList, [], [drop_custom_list])
         convert_ref_button.click(ref_runs, [dataset_dropdown], [convert_step])
         convert_weights_button.click(convert_weights, [dataset_dropdown, convert_step], [message_output])
@@ -1517,7 +1553,7 @@ if __name__ == "__main__":
                              ml_size, ml_format_weight, ml_keep_ratio, ml_drop_overlap, use_blacklist, drop_use_presets, drop_custom_list, op_exists_txt, anal_del_json, kohya_rep_dropdown], [message_output],
                             scroll_to_output=True)
         illu_button.click(download_illust, [illu_name, illu_get_source, illu_max_size], [message_output], scroll_to_output=True)
-        save_output.click(saving_output, [dataset_dropdown], [message_output])
+        save_output.click(saving_output, [dataset_dropdown, kohya_rep_dropdown], [message_output])
         iblock.title = "小苹果webui"
 
     # log.info(f"Server started at http://{args.host}:{args.port}")

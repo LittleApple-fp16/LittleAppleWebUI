@@ -1,3 +1,21 @@
+#refresh_datasets {
+    max-width: 2.2em;
+    min-width: 2.2em !important;
+    height: 2.4em;
+    position: relative;
+    top: 2.2em !important;
+	padding: 0px calc(2 * var(--spacing-lg));
+}
+
+#refresh_reps {
+    max-width: 2.2em;
+    min-width: 2.2em !important;
+    height: 2.4em;
+    position: relative;
+    top: 2.2em !important;
+	padding: 0px calc(2 * var(--spacing-lg));
+}
+
 :root {
   --name: LittleApple-fp16/NovelAI_Theme;
   --background-fill-primary: white;
@@ -123,10 +141,10 @@
   --input-text-size: var(--text-md);
   --input-text-weight: 400;
   --layout-gap: var(--spacing-xxl);
-  --link-text-color: var(--secondary-600);
-  --link-text-color-active: var(--secondary-600);
-  --link-text-color-hover: var(--secondary-700);
-  --link-text-color-visited: var(--secondary-500);
+  --link-text-color: var(--primary-600);
+  --link-text-color-active: var(--primary-600);
+  --link-text-color-hover: var(--primary-700);
+  --link-text-color-visited: var(--primary-500);
   --loader-color: var(--color-accent);
   --neutral-100: #f3f4f6;
   --neutral-200: #e5e7eb;
@@ -339,13 +357,13 @@
   --input-shadow-focus: var(
   --input-shadow);
   --link-text-color-active: var(
-  --secondary-500);
+  --primary-500);
   --link-text-color: var(
-  --secondary-500);
+  --primary-500);
   --link-text-color-hover: var(
-  --secondary-400);
+  --primary-400);
   --link-text-color-visited: var(
-  --secondary-600);
+  --primary-600);
   --loader-color: var(
   --color-accent);
   --panel-background-fill: var(
