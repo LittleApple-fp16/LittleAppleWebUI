@@ -7,6 +7,15 @@
     right: 15px;
 }
 
+#refresh_reps {
+    max-width: 2.2em;
+    min-width: 2.2em !important;
+    height: 2.4em;
+    position: relative;
+    top: 34px;
+    right: 15px;
+}
+
 #convert_ref_button {
     max-width: 2.2em;
     min-width: 2.2em !important;
@@ -17,6 +26,11 @@
 }
 
 #dataset_dropbar {
+    max-width: 36em;
+    background: none;
+}
+
+#rep_dropbar {
     max-width: 36em;
     background: none;
 }
@@ -49,6 +63,10 @@
 }
 #dataset_dropbar>label>span {
     margin-bottom: 0;
+}
+
+#rep_dropbar>label>span {
+	margin-bottom: 0;
 }
 
 #custom_list {

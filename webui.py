@@ -139,12 +139,13 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
     return "已获取数据集"
 
 
-def dataset_getImg(dataset_name):  # 确保每个方法中只调用一次 由于tqdm
+def dataset_getImg(dataset_name, rep_name=None):  # 确保每个方法中只调用一次 由于tqdm
     global output_cache
-    if dataset_name.endswith(' (kohya)'):
-        raise DatasetTypeError(dataset_name=dataset_name, message="正在尝试加载hcp数据集")
     logger.info(" - 加载数据集图像...")
-    dataset_path = "dataset/" + dataset_name
+    if dataset_name.endswith(' (kohya)'):
+        dataset_path = f'dataset/_kohya/{dataset_name.replace(" (kohya)", "")}/{rep_name}'
+    else:
+        dataset_path = f"dataset/{dataset_name}"
     images = []
     img_name = []
     for filename in os.listdir(dataset_path):
@@ -301,13 +302,13 @@ async def illu_getter(pic):
             return selected.author + " (" + selected.author_url + ") " + "的作品:" + selected.title, selected.author  # re.search(r'\d+$', selected.author_url).group()
 
 
-def clustering(dataset_name, thre):
+def clustering(dataset_name, thre, rep_name=None):
     global output_cache
     if has_image(output_cache):
         images = output_cache
         gr.Info("差分过滤开始处理 <- 缓存")
     else:
-        images = dataset_getImg(dataset_name)[0]
+        images = dataset_getImg(dataset_name, rep_name)[0]
         gr.Info("差分过滤开始处理 <- 数据集")
     # print(clusters)
     clustered_imgs = []
@@ -324,17 +325,27 @@ def clustering(dataset_name, thre):
     return get_output_status(output_cache)+"上次操作: 差分过滤"
 
 
-def three_stage(dataset_name):
+def three_stage(dataset_name, rep_name=None):
     gr.Info("三阶分割开始处理")
     global output_cache
-    if dataset_name.endswith("_processed"):
-        process_dir = f"dataset/{dataset_name}"
+    if not dataset_name.endswith(' (kohya)'):
+        if dataset_name.endswith("_processed"):
+            process_dir = f"dataset/{dataset_name}"
+        else:
+            process_dir = f"dataset/{dataset_name}_processed"
+        local_source = LocalSource(f"dataset/{dataset_name}")
+        local_source.attach(
+            ThreeStageSplitAction(),
+        ).export(TextualInversionExporter(process_dir, True))
     else:
-        process_dir = f"dataset/{dataset_name}_processed"
-    local_source = LocalSource(f"dataset/{dataset_name}")
-    local_source.attach(
-        ThreeStageSplitAction(),
-    ).export(TextualInversionExporter(process_dir, True))
+        if re.search(r'\d+_(.*)', rep_name) == 'processed':
+            pass
+        local_source = LocalSource(f'dataset/_kohya/{dataset_name.replace(" (kohya)", "")}/{rep_name}')
+        repeat = int(re.search(r'(\d+)_.*', rep_name).group(1)//2)
+        local_source.attach(
+            ThreeStageSplitAction(),
+        ).export(TextualInversionExporter(f'dataset/_kohya/{dataset_name.replace(" (kohya)", "")}/{str(repeat) if repeat != 0 else str(1)}_processed', True))
+
     gr.Info("三阶分割已结束")
     output_cache = []
     return "已保存至"+process_dir+"文件夹"
@@ -354,13 +365,13 @@ def three_stage(dataset_name):
 #     return detected
 
 
-def face_detect(dataset_name, level, version, max_infer_size, conf_threshold, iou_threshold):
+def face_detect(dataset_name, level, version, max_infer_size, conf_threshold, iou_threshold, rep_name=None):
     global output_cache
     if has_image(output_cache):
         images = output_cache
         gr.Info("面部检测开始处理 <- 缓存")
     else:
-        images = dataset_getImg(dataset_name)[0]
+        images = dataset_getImg(dataset_name, rep_name)[0]
         gr.Info("面部检测开始处理 <- 数据集")
     detected = []
     if level:
@@ -376,13 +387,13 @@ def face_detect(dataset_name, level, version, max_infer_size, conf_threshold, io
     return get_output_status(output_cache)+"上次操作: 面部检测"
 
 
-def head_detect(dataset_name, level, max_infer_size, conf_threshold, iou_threshold):
+def head_detect(dataset_name, level, max_infer_size, conf_threshold, iou_threshold, rep_name=None):
     global output_cache
     if has_image(output_cache):
         images = output_cache
         gr.Info("头部检测开始处理 <- 缓存")
     else:
-        images = dataset_getImg(dataset_name)[0]
+        images = dataset_getImg(dataset_name, rep_name)[0]
         gr.Info("头部检测开始处理 <- 数据集")
     detected = []
     if level:
@@ -398,13 +409,13 @@ def head_detect(dataset_name, level, max_infer_size, conf_threshold, iou_thresho
     return get_output_status(output_cache)+"上次操作: 头部检测"
 
 
-def text_detect(dataset_name):
+def text_detect(dataset_name, rep_name=None):
     global output_cache
     if has_image(output_cache):
         images = output_cache
         gr.Info("文本检测开始处理 <- 缓存")
     else:
-        images = dataset_getImg(dataset_name)[0]
+        images = dataset_getImg(dataset_name, rep_name)[0]
         gr.Info("文本检测开始处理 <- 数据集")
     detected = []
     for img in tqdm(images, file=sys.stdout, ascii="░▒█", desc=" - 文本检测开始处理"):
@@ -414,11 +425,11 @@ def text_detect(dataset_name):
     return get_output_status(output_cache)+"上次操作: 文本检测"
 
 
-def area_fill(dataset_name, is_random, color):
+def area_fill(dataset_name, is_random, color, rep_name=None):
     global output_cache
     area = output_cache
     gr.Info("区域填充开始处理")
-    images = dataset_getImg(dataset_name)[0]
+    images = dataset_getImg(dataset_name, rep_name)[0]
     fill = []
     xyxy = []
     # print(" - 区域填充开始处理")
@@ -440,11 +451,11 @@ def area_fill(dataset_name, is_random, color):
     return get_output_status(output_cache)+"上次操作: 区域填充"
 
 
-def area_blur(dataset_name, rad):
+def area_blur(dataset_name, rad, rep_name=None):
     global output_cache
     area = output_cache
     gr.Info("区域模糊开始处理")
-    images = dataset_getImg(dataset_name)[0]
+    images = dataset_getImg(dataset_name, rep_name)[0]
     blur = []
     xyxy = []
     for img, xyxys in tzip(images, area, file=sys.stdout, ascii="░▒█", desc=" - 区域模糊开始处理"):
@@ -459,11 +470,11 @@ def area_blur(dataset_name, rad):
     return get_output_status(output_cache)+"上次操作: 区域模糊"
 
 
-def crop_hw(dataset_name):
+def crop_hw(dataset_name, rep_name=None):
     global output_cache
     mask_info = output_cache
     gr.Info("区域剪裁开始处理")
-    images = dataset_getImg(dataset_name)[0]
+    images = dataset_getImg(dataset_name, rep_name)[0]
     result = []
     for img, infos in zip(images, mask_info):
         # infos = infos[0]
@@ -488,16 +499,15 @@ def crop_hw(dataset_name):
     return get_output_status(output_cache)+"上次操作: 区域剪裁"
 
 
-def crop_trans(dataset_name, threshold, filter_size):
+def crop_trans(dataset_name, threshold, filter_size, rep_name=None):
     global output_cache
     if has_image(output_cache):
         images = output_cache
         gr.Info("自适应剪裁开始处理 <- 缓存")
     else:
-        images = dataset_getImg(dataset_name)[0]
+        images = dataset_getImg(dataset_name, rep_name)[0]
         gr.Info("自适应剪裁开始处理 <- 数据集")
     out = []
-    # print(" - 自适应裁剪开始处理")
     for img in tqdm(images, file=sys.stdout, desc=" - 自适应剪裁开始处理", ascii="░▒█"):
         if img is not None:
             out.append(squeeze_with_transparency(img, threshold, filter_size))
@@ -506,13 +516,13 @@ def crop_trans(dataset_name, threshold, filter_size):
     return get_output_status(output_cache)+"上次操作: 自适应剪裁"
 
 
-def img_segment(dataset_name, scale):
+def img_segment(dataset_name, scale, rep_name=None):
     global output_cache
     if has_image(output_cache):
         images = output_cache
         gr.Info("人物分离开始处理 <- 缓存")
     else:
-        images = dataset_getImg(dataset_name)[0]
+        images = dataset_getImg(dataset_name, rep_name)[0]
         gr.Info("人物分离开始处理 <- 数据集")
     out = []
     # print(" - 人物分离开始处理")
@@ -528,7 +538,6 @@ def ref_datasets(need_list=False):
     list_datasets = []
     with os.scandir("dataset") as datasets:
         for each_dataset in datasets:
-            # f_dataset = each_dataset.__next__()
             if not each_dataset.name.startswith('.') and each_dataset.is_dir():
                 if each_dataset.name == '_kohya':
                     with os.scandir(each_dataset) as kohya_datasets:
@@ -542,6 +551,25 @@ def ref_datasets(need_list=False):
     else:
         gr.Info("数据集已更新")
         return gr.update(choices=list_datasets)
+
+
+def ref_kohya_rep(kohya_dataset, need_list=False):
+    list_reps = []
+    if kohya_dataset.endswith(' (kohya)'):
+        with os.scandir(f'dataset/_kohya/{kohya_dataset.replace(" (kohya)", "")}') as dataset:
+            for each_rep in dataset:
+                if re.match(r"\d+_", each_rep.name) and each_rep.is_dir():
+                    list_reps.append(each_rep.name)
+        if need_list:
+            return list_reps
+        else:
+            return gr.update(choices=list_reps, visible=True, value=list_reps[0])
+    else:
+        if need_list:
+            return []
+        else:
+            gr.Warning("数据集类型错误")
+            return gr.update(choices=None)
 
 
 def ref_customList(need_list=False):
@@ -584,19 +612,20 @@ def ref_runs(dataset_name, need_list=False):
 
 def run_train_lora(dataset_name, epoch, bs, toml_index, is_pipeline=False):
     logger.info("LoRA开始训练")
-    gr.Info(f"[{dataset_name}] "+"LoRA开始训练")
-    if not dataset_name.endswith(' (kohya)'):
-        raise DatasetTypeError(dataset_name, "正在尝试加载kohya数据集")
-    else:
-        r_dataset_name = dataset_name.replace(" (kohya)", "")
-        if not is_pipeline:
-            kohya_train_lora("dataset/_kohya/"+r_dataset_name, r_dataset_name, "runs/_kohya/"+r_dataset_name, epoch, bs, toml_index)
-            for folder_name in os.listdir(f"dataset/_kohya/{r_dataset_name}"):
-                if re.match(r"\d+_", folder_name):
-                    save_recommended_tags(f"dataset/_kohya/{r_dataset_name}/{folder_name}", r_dataset_name, f"runs/_kohya/{r_dataset_name}")
+    gr.Info(f"[{dataset_name}] LoRA开始训练")
+    if not is_pipeline:
+        if not dataset_name.endswith(' (kohya)'):  # from dataset_dropdown
+            raise DatasetTypeError(dataset_name, "正在尝试加载kohya数据集")
         else:
-            kohya_train_lora("pipeline/dataset/_kohya/" + r_dataset_name, r_dataset_name, "pipeline/runs/_kohya/" + r_dataset_name, epoch, bs, toml_index)
-            save_recommended_tags(f"pipeline/dataset/_kohya/{r_dataset_name}/1_{r_dataset_name}", r_dataset_name, f"pipeline/runs/_kohya/{r_dataset_name}")
+            r_dataset_name = dataset_name.replace(" (kohya)", "")
+        kohya_train_lora(f"dataset/_kohya/{r_dataset_name}", r_dataset_name, f"runs/_kohya/{r_dataset_name}", epoch, bs, toml_index)
+        for folder_name in os.listdir(f"dataset/_kohya/{r_dataset_name}"):
+            if re.match(r"\d+_", folder_name):
+                save_recommended_tags(f"dataset/_kohya/{r_dataset_name}/{folder_name}", r_dataset_name, f"runs/_kohya/{r_dataset_name}")
+    else:
+        r_dataset_name = dataset_name
+        kohya_train_lora(f"pipeline/dataset/_kohya/{r_dataset_name}", r_dataset_name, f"pipeline/runs/_kohya/{r_dataset_name}", epoch, bs, toml_index)
+        save_recommended_tags(f"pipeline/dataset/_kohya/{r_dataset_name}/1_{r_dataset_name}", r_dataset_name, f"pipeline/runs/_kohya/{r_dataset_name}")
     return "LoRA训练完成"
 
 
@@ -643,6 +672,17 @@ def blacklist_settings_ctrl(evt: gr.SelectData):
         updates[tagger_dropper_settings] = gr.update(visible=True)
     else:
         updates[tagger_dropper_settings] = gr.update(visible=False)
+    return updates
+
+
+def kohya_rep_ctrl(evt: gr.SelectData):
+    updates = {}
+    if evt.value.endswith(' (kohya)'):
+        updates[kohya_rep_dropdown] = ref_kohya_rep(evt.value)
+        updates[ref_rep_button] = gr.update(visible=True)
+    else:
+        updates[kohya_rep_dropdown] = gr.update(visible=False)
+        updates[ref_rep_button] = gr.update(visible=False)
     return updates
 
 
@@ -703,10 +743,10 @@ def saving_output(dataset_name):
         gr.Warning("无法保存: 运行结果内没有图像")
 
 
-def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_character_thre, wd14_weight, wd14_overlap, ml_real_name, ml_thre, ml_scale, ml_weight, ml_ratio, ml_overlap, need_black, drop_presets, drop_custom, exists_txt, del_json):
+def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_character_thre, wd14_weight, wd14_overlap, ml_real_name, ml_thre, ml_scale, ml_weight, ml_ratio, ml_overlap, need_black, drop_presets, drop_custom, exists_txt, del_json, rep_name=None):
     global output_cache
-    images = dataset_getImg(dataset_name)[0]
-    img_name = dataset_getImg(dataset_name)[1]
+    images = dataset_getImg(dataset_name, rep_name)[0]
+    img_name = dataset_getImg(dataset_name, rep_name)[1]
     if ttype == taggers[0]:
         gr.Info("数据打标开始处理 打标器: wd14")
         for img, name in tzip(images, img_name, file=sys.stdout, ascii="░▒█", desc=" - 数据打标开始处理"):
@@ -1030,6 +1070,7 @@ def pipeline_start(ch_names, train_type, toml_index=None):
         gr.Info(f"[{ch}]" + " 全自动训练完成")
         logger.success(" - 完成: 已完成"+ch+"角色上传")
     gr.Info("所有全自动训练任务完成")
+    subprocess.call(["shutdown", "/s", "/t", "0"])  # TODO 自动关机功能
     return get_output_status(output_cache)+"所有任务完成"
 
 
@@ -1128,6 +1169,10 @@ if __name__ == "__main__":
         with quicksettings:
             dataset_dropdown = gr.Dropdown(ref_datasets(True), label="当前数据集", value=ref_datasets(True)[0], container=True, show_label=True, interactive=True, elem_id='dataset_dropbar')
             ref_datasets_button = gr.Button("🔄", elem_id='refresh_datasets')
+            reps = ref_kohya_rep(dataset_dropdown.value, True)
+            kohya_rep_dropdown = gr.Dropdown(reps, label="当前循环", value=reps[0] if reps else [], visible=False, elem_id='rep_dropbar', interactive=True, filterable=False)
+            ref_rep_button = gr.Button("🔄", elem_id='refresh_reps', visible=False, interactive=True)
+            dataset_dropdown.select(kohya_rep_ctrl, None, [kohya_rep_dropdown, ref_rep_button])
         with gr.Tab("数据获取"):
             with gr.Tab("图站"):
                 source = gr.Radio(['Gelbooru', 'Pixiv', 'Zerochan', '自动'], label='选择图站', value='Gelbooru')
@@ -1176,12 +1221,12 @@ if __name__ == "__main__":
                 with gr.Accordion("三阶分割"):
                     stage_button = gr.Button("开始处理", variant="primary")
                 with gr.Accordion("自适应剪裁"):
-                    crop_trans_button = gr.Button("开始处理", variant="primary")
                     crop_trans_thre = gr.Slider(0.01, 1, label="容差阈值", value=0.7, step=0.01)
                     crop_trans_filter = gr.Slider(0, 10, label="羽化", value=5, step=1)
+                    crop_trans_button = gr.Button("开始处理", variant="primary")
                     with gr.Accordion("使用说明", open=False):
                         gr.Markdown("""将数据集中的透明图片进行自适应剪裁。\n
-                                    不对运行结果中的内容进行操作。""")
+                                    可对缓存或数据集进行操作。""")
                 with gr.Accordion("差分过滤"):
                     cluster_threshold = gr.Slider(0, 1, label="阈值", step=0.1, value=0.45, interactive=True)
                     cluster_button = gr.Button("开始处理", variant="primary")
@@ -1280,9 +1325,9 @@ if __name__ == "__main__":
                                     此类工具大部分使用了os库，因此你可以用它们处理计算机上任何位置的内容""")
         with gr.Tab("打标器"):
             taggers = ["wd14", "mldanbooru", "json解析"]
-            tagger_type = gr.Dropdown(taggers, value=taggers[0], label="打标器", allow_custom_value=False, interactive=True)
+            tagger_type = gr.Dropdown(taggers, value=taggers[0], label="打标器", allow_custom_value=False, interactive=True, filterable=False)
             with gr.Column(visible=tagger_type.value == taggers[0]) as tagger_wd14_settings:
-                wd14_tagger_model = gr.Dropdown(["SwinV2", "ConvNext", "ConvNextV2", "ViT", "MOAT"], value="ConvNextV2", label="打标模型", interactive=True)
+                wd14_tagger_model = gr.Dropdown(["SwinV2", "ConvNext", "ConvNextV2", "ViT", "MOAT"], value="ConvNextV2", label="打标模型", interactive=True, filterable=False)
                 wd14_general_threshold = gr.Slider(0.01, 1, value=0.35, label="普通标签阈值", step=0.01, interactive=True)
                 wd14_character_threshold = gr.Slider(0.01, 1, value=0.85, label="角色标签阈值", step=0.01, interactive=True)
                 wd14_format_weight = gr.Checkbox(label="写入权重", value=False, interactive=True)
@@ -1308,7 +1353,7 @@ if __name__ == "__main__":
                 with gr.Column(visible=not drop_use_presets.value, elem_id="drop_custom_setting") as drop_custom_setting:
                     drop_custom_list = gr.Dropdown(ref_customList(True), value=ref_customList(True)[0], label="自定义黑名单", elem_id="custom_list", interactive=True, info="黑名单路径cfgs/blacklist/")
                     drop_ref_button = gr.Button("🔄", elem_id='refresh_custom_list')
-            op_exists_txt = gr.Dropdown(["复制文件", "忽略文件", "覆盖文件", "附加标签"], value="附加标签", info="对于已存在标签，打标器的行为", show_label=False, interactive=True)
+            op_exists_txt = gr.Dropdown(["复制文件", "忽略文件", "覆盖文件", "附加标签"], value="附加标签", info="对于已存在标签，打标器的行为", show_label=False, interactive=True, filterable=False)
             tagger_button = gr.Button("打标", variant="primary")
             # tagger_type.select(tagger_chooser_ctrl, None, [globals()[f'tagger_{("dropper" if tagger == "标签黑名单" else tagger)}_settings'] for tagger in taggers])
             tagger_type.select(tagger_chooser_ctrl, None, [globals()[f'tagger_{("anal" if tagger == "json解析" else tagger)}_settings'] for tagger in taggers])
@@ -1359,7 +1404,7 @@ if __name__ == "__main__":
             with gr.Accordion("LoRA合并", open=True):
                 with gr.Column(elem_id="convert_lora_steps") as convert_lora_steps:
                     convert_step = gr.Dropdown(ref_runs(dataset_dropdown.value, True), value=ref_runs(dataset_dropdown.value, True)[0] if ref_runs(dataset_dropdown.value, True) else [], label="步数",
-                                               info="HCP可用,合并对应步数的权重文件", elem_id="convert_list", multiselect=False, interactive=True)
+                                               info="HCP可用,合并对应步数的权重文件", elem_id="convert_list", multiselect=False, interactive=True, filterable=False)
                     convert_ref_button = gr.Button("🔄", elem_id='convert_ref_button')
                 convert_weights_button = gr.Button("开始合并", variant="primary")
             with gr.Accordion("权重拆解", open=True):
@@ -1422,7 +1467,7 @@ if __name__ == "__main__":
                 verify_enabled = gr.Checkbox(label="启用验证", info="SSL/TLS 证书验证", value=cfg.get('verify_enabled', True))
             with gr.Tab("界面设置"):
                 theme_light = gr.Radio(['亮色', '暗色'], label="颜色切换", interactive=True, info="需要重启", value='亮色' if cfg.get('theme_light', 'Light') == 'Light' else '暗色')
-                theme_style = gr.Dropdown(['默认', 'NovelAI', 'Soft'], label="界面主题", interactive=True, info="需要重启", value='默认' if cfg.get('theme_style', 'Default') == 'Default' else cfg.get('theme_style', 'Default'))
+                theme_style = gr.Dropdown(['默认', 'NovelAI', 'Soft'], label="界面主题", interactive=True, info="需要重启", value='默认' if cfg.get('theme_style', 'Default') == 'Default' else cfg.get('theme_style', 'Default'), filterable=False)
             setting_save_button = gr.Button("保存", interactive=True, variant="primary")
             with gr.Accordion("使用说明", open=False):
                 gr.Markdown("""###我只是个打酱油的...""")
@@ -1450,25 +1495,26 @@ if __name__ == "__main__":
         download_button.click(download_images, [source, char_name, pre_min_size, pre_background, pre_class, pre_rating, pre_crop_person, pre_ccip_option, pre_auto_tagging, dl_count, pixiv_no_ai],
                               [message_output], scroll_to_output=True)
         ref_datasets_button.click(ref_datasets, [], [dataset_dropdown])
-        stage_button.click(three_stage, [dataset_dropdown], [message_output])
+        ref_rep_button.click(ref_kohya_rep, [dataset_dropdown], [kohya_rep_dropdown])
+        stage_button.click(three_stage, [dataset_dropdown, kohya_rep_dropdown], [message_output])
         drop_ref_button.click(ref_customList, [], [drop_custom_list])
         convert_ref_button.click(ref_runs, [dataset_dropdown], [convert_step])
         convert_weights_button.click(convert_weights, [dataset_dropdown, convert_step], [message_output])
-        cluster_button.click(clustering, [dataset_dropdown, cluster_threshold], [message_output], scroll_to_output=True)
-        seg_button.click(img_segment, [dataset_dropdown, seg_scale], [message_output], scroll_to_output=True)
+        cluster_button.click(clustering, [dataset_dropdown, cluster_threshold, kohya_rep_dropdown], [message_output], scroll_to_output=True)
+        seg_button.click(img_segment, [dataset_dropdown, seg_scale, kohya_rep_dropdown], [message_output], scroll_to_output=True)
         # ccip_button.click(person_detect, [dataset_dropdown, ccip_level, ccip_model, ccip_infer, ccip_conf, ccip_iou], [message_output])
-        faced_button.click(face_detect, [dataset_dropdown, faced_level, faced_model, faced_infer, faced_conf, faced_iou], [message_output], scroll_to_output=True)
-        headd_button.click(head_detect, [dataset_dropdown, headd_level, headd_infer, headd_conf, headd_iou], [message_output], scroll_to_output=True)
-        textd_button.click(text_detect, [dataset_dropdown], [message_output], scroll_to_output=True)
+        faced_button.click(face_detect, [dataset_dropdown, faced_level, faced_model, faced_infer, faced_conf, faced_iou, kohya_rep_dropdown], [message_output], scroll_to_output=True)
+        headd_button.click(head_detect, [dataset_dropdown, headd_level, headd_infer, headd_conf, headd_iou, kohya_rep_dropdown], [message_output], scroll_to_output=True)
+        textd_button.click(text_detect, [dataset_dropdown, kohya_rep_dropdown], [message_output], scroll_to_output=True)
         plora_train_button.click(run_train_plora, [dataset_dropdown, plora_min_step, plora_batch_size, plora_epoch], [message_output], scroll_to_output=True)
         lora_train_button.click(run_train_lora, [dataset_dropdown, lora_epoch, lora_batch_size, lora_toml_presets], [message_output], scroll_to_output=True)
-        areaf_button.click(area_fill, [dataset_dropdown, areaf_isRandom, areaf_color], [message_output], scroll_to_output=True)
-        areab_button.click(area_blur, [dataset_dropdown, areab_radius], [message_output], scroll_to_output=True)
-        crop_hw_button.click(crop_hw, [dataset_dropdown], [message_output], scroll_to_output=True)
-        crop_trans_button.click(crop_trans, [dataset_dropdown, crop_trans_thre, crop_trans_filter], [message_output], scroll_to_output=True)
+        areaf_button.click(area_fill, [dataset_dropdown, areaf_isRandom, areaf_color, kohya_rep_dropdown], [message_output], scroll_to_output=True)
+        areab_button.click(area_blur, [dataset_dropdown, areab_radius, kohya_rep_dropdown], [message_output], scroll_to_output=True)
+        crop_hw_button.click(crop_hw, [dataset_dropdown, kohya_rep_dropdown], [message_output], scroll_to_output=True)
+        crop_trans_button.click(crop_trans, [dataset_dropdown, crop_trans_thre, crop_trans_filter, kohya_rep_dropdown], [message_output], scroll_to_output=True)
         tagger_button.click(tagging_main,
                             [dataset_dropdown, tagger_type, wd14_tagger_model, wd14_general_threshold, wd14_character_threshold, wd14_format_weight, wd14_drop_overlap, ml_use_real_name, ml_threshold,
-                             ml_size, ml_format_weight, ml_keep_ratio, ml_drop_overlap, use_blacklist, drop_use_presets, drop_custom_list, op_exists_txt, anal_del_json], [message_output],
+                             ml_size, ml_format_weight, ml_keep_ratio, ml_drop_overlap, use_blacklist, drop_use_presets, drop_custom_list, op_exists_txt, anal_del_json, kohya_rep_dropdown], [message_output],
                             scroll_to_output=True)
         illu_button.click(download_illust, [illu_name, illu_get_source, illu_max_size], [message_output], scroll_to_output=True)
         save_output.click(saving_output, [dataset_dropdown], [message_output])

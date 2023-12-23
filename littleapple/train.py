@@ -1,5 +1,6 @@
 from ditk import logging
 from cyberharem.train import train_plora
+from littleapple.exceptions import DatasetTypeError
 
 
 def run_train_plora(dataset_name, min_step, bs, epoc, is_pipeline=False):
@@ -14,6 +15,8 @@ def run_train_plora(dataset_name, min_step, bs, epoc, is_pipeline=False):
             'epochs': int(epoc),
         }
     else:
+        if dataset_name.endswith(' (kohya)'):  # from dataset_dropdown
+            raise DatasetTypeError(dataset_name, "正在尝试加载hcp数据集")
         params = {
             'source': 'dataset\\' + dataset_name,
             'name': dataset_name,
