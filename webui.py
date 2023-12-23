@@ -71,7 +71,7 @@ except ModuleNotFoundError as e:
         print("[错误] - 未知的操作系统")
 
 
-def download_images(source_type, character_name, p_min_size, p_background, p_class, p_rating, p_crop_person, p_ccip, p_auto_tagging, num_images, p_ai):
+def download_images(source_type, character_name, p_min_size, p_background, p_class, p_rating, p_crop_person, p_ccip, p_auto_tagging, num_images, p_ai, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     actions = []
     rating_map = {0: 'safe', 1: 'r15', 2: 'r18'}
@@ -127,7 +127,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
         actions.append(FirstNSelectAction(int(num_images)))
         if source_type == 'Gelbooru' and not p_auto_tagging:
             source_init.attach(*actions).export(  # 只下载前num_images张图片
-                SaveExporter(save_path)  # 将图片保存到指定路径
+                SaveExporter(save_path)  # 将图片保存到指定路径 Base导出类内含tqdm
             )
         else:
             source_init.attach(*actions).export(  # 只下载前num_images张图片
@@ -139,7 +139,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
     return "已获取数据集"
 
 
-def dataset_getImg(dataset_name, rep_name=None):  # 确保每个方法中只调用一次 由于tqdm
+def dataset_getImg(dataset_name, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     logger.info(" - 加载数据集图像...")
     if dataset_name.endswith(' (kohya)'):
@@ -148,7 +148,7 @@ def dataset_getImg(dataset_name, rep_name=None):  # 确保每个方法中只调�
         dataset_path = f"dataset/{dataset_name}"
     images = []
     img_name = []
-    for filename in os.listdir(dataset_path):
+    for filename in tqdm(os.listdir(dataset_path), desc=f"加载数据集图像: {dataset_name}"):
         if filename.endswith(('.png', '.jpg', '.jpeg')):
             img = Image.open(os.path.join(dataset_path, filename))
             if img is not None:
@@ -159,7 +159,7 @@ def dataset_getImg(dataset_name, rep_name=None):  # 确保每个方法中只调�
     return images, img_name
 
 
-def download_illust(i_name, i_source, i_maxsize=None):
+def download_illust(i_name, i_source, i_maxsize=None, progress=gr.Progress(track_tqdm=True)):
     global pyapi
     global cfg
     global output_cache
@@ -181,7 +181,7 @@ def download_illust(i_name, i_source, i_maxsize=None):
         if 0 in i_source:
             logger.info("[信息] - 画师内容获取需要一段时间")
             links = get_image_links(illust['user']['id'], maxsize)
-            for url, name in tzip(links[0], links[1], file=sys.stdout, ascii="░▒█", desc=" - 开始下载"):
+            for url, name in tzip(links[0], links[1], file=sys.stdout, desc="获取画师数据集"):
                 if not os.path.exists(f"dataset/{illust['user']['name']}"):
                     os.makedirs(f"dataset/{illust['user']['name']}")
                 download_link(url, f"dataset/{illust['user']['name']}/{name}.png")
@@ -274,7 +274,7 @@ def get_output_status(o_cache):
         return "运行结果异常 | "
 
 
-async def illu_getter(pic):
+async def illu_getter(pic, progress=gr.Progress(track_tqdm=True)):
     global cfg
     global output_cache
     gr.Info("开始获取画师信息")
@@ -282,13 +282,15 @@ async def illu_getter(pic):
         proxies = 'http://'+cfg.get('proxie_ip', None)+':'+cfg.get('proxie_port', None)
     else:
         proxies = None
+    progress(0.2, desc="检查客户端连接")
     async with Network(proxies=proxies) as client:
         ascii2d = Ascii2D(
             client=client
         )
+        progress(0.6, desc="搜索作品信息")
         resp = await ascii2d.search(file=pic)
         selected = None
-        for i in resp.raw:
+        for i in tqdm(resp.raw, desc="筛选作品信息"):
             if i.author_url.startswith("https://www.pixiv.net/users/"):
                 selected = i
                 break
@@ -302,7 +304,7 @@ async def illu_getter(pic):
             return selected.author + " (" + selected.author_url + ") " + "的作品:" + selected.title, selected.author  # re.search(r'\d+$', selected.author_url).group()
 
 
-def clustering(dataset_name, thre, rep_name=None):
+def clustering(dataset_name, thre, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     if has_image(output_cache):
         images = output_cache
@@ -314,7 +316,7 @@ def clustering(dataset_name, thre, rep_name=None):
     clustered_imgs = []
     added_clusters = set()  # 创建一个集合 其中存储已经添加过的标签 此集合将约束被过滤的img列表 集合中的元素无法dup
     # print(" - 差分过滤开始处理")
-    for i, cluster in enumerate(tqdm(lpips_clustering(images, thre), file=sys.stdout, desc=" - 差分过滤开始处理", ascii="░▒█")):  # 聚类方法 -1表示noise，与sklearn中的相同
+    for i, cluster in enumerate(tqdm(lpips_clustering(images, thre), file=sys.stdout, desc="执行差分过滤")):  # 聚类方法 -1表示noise，与sklearn中的相同
         if cluster == -1:
             clustered_imgs.append(images[i])
         elif cluster not in added_clusters:
@@ -325,7 +327,7 @@ def clustering(dataset_name, thre, rep_name=None):
     return get_output_status(output_cache)+"上次操作: 差分过滤"
 
 
-def three_stage(dataset_name, rep_name=None):
+def three_stage(dataset_name, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     gr.Info("三阶分割开始处理")
     global output_cache
     if not dataset_name.endswith(' (kohya)'):
@@ -352,7 +354,7 @@ def three_stage(dataset_name, rep_name=None):
     return "操作结束 | "+"上次操作: 三阶分割"
 
 
-def three_stage_pickup():
+def three_stage_pickup(progress=gr.Progress(track_tqdm=True)):
     global output_cache
     gr.Info("选择包含图像的文件夹")
     root = tk.Tk()
@@ -377,7 +379,7 @@ def three_stage_pickup():
     return "操作结束 | " + "上次操作: 三阶分割"
 
 
-def mirror_process():
+def mirror_process(progress=gr.Progress(track_tqdm=True)):
     img_count = 0
     tag_count = 0
     gr.Info("选择包含图像的文件夹")
@@ -394,7 +396,7 @@ def mirror_process():
     for i_pth in pths:
         output_folder = i_pth + '_mirror'
         os.makedirs(output_folder, exist_ok=False)
-        for filename in tqdm(os.listdir(i_pth), file=sys.stdout, desc=" - 快速镜像开始处理", ascii="░▒█"):
+        for filename in tqdm(os.listdir(i_pth), file=sys.stdout, desc="执行快速镜像"):
             if filename.endswith(".jpg") or filename.endswith(".png") or filename.endswith(".jpeg"):
                 img_path = os.path.join(i_pth, filename)
                 txt_file = os.path.splitext(img_path)[0] + ".txt"
@@ -430,7 +432,7 @@ def mirror_process():
 #     return detected
 
 
-def face_detect(dataset_name, level, version, max_infer_size, conf_threshold, iou_threshold, rep_name=None):
+def face_detect(dataset_name, level, version, max_infer_size, conf_threshold, iou_threshold, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     if has_image(output_cache):
         images = output_cache
@@ -445,14 +447,14 @@ def face_detect(dataset_name, level, version, max_infer_size, conf_threshold, io
         level = "n"
     # print(" - 面部检测开始处理")
     # print("   *将返回区域结果")
-    for img in tqdm(images, file=sys.stdout, desc=" - 面部检测开始处理", ascii="░▒█"):
+    for img in tqdm(images, file=sys.stdout, desc="执行面部检测"):
         detected.append(detect_faces(img, level, version, max_infer_size, conf_threshold, iou_threshold))
     gr.Info("面部检测已结束")
     output_cache = detected
     return get_output_status(output_cache)+"上次操作: 面部检测"
 
 
-def head_detect(dataset_name, level, max_infer_size, conf_threshold, iou_threshold, rep_name=None):
+def head_detect(dataset_name, level, max_infer_size, conf_threshold, iou_threshold, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     if has_image(output_cache):
         images = output_cache
@@ -467,14 +469,14 @@ def head_detect(dataset_name, level, max_infer_size, conf_threshold, iou_thresho
         level = "n"
     # print(" - 头部检测开始处理")
     # print("   *将返回区域结果")
-    for img in tqdm(images, file=sys.stdout, ascii="░▒█", desc=" - 头部检测开始处理"):
+    for img in tqdm(images, file=sys.stdout, desc="执行头部检测"):
         detected.append(detect_heads(img, level, max_infer_size, conf_threshold, iou_threshold))
     gr.Info("头部检测已结束")
     output_cache = detected
     return get_output_status(output_cache)+"上次操作: 头部检测"
 
 
-def text_detect(dataset_name, rep_name=None):
+def text_detect(dataset_name, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     if has_image(output_cache):
         images = output_cache
@@ -483,22 +485,21 @@ def text_detect(dataset_name, rep_name=None):
         images = dataset_getImg(dataset_name, rep_name)[0]
         gr.Info("文本检测开始处理 <- 数据集")
     detected = []
-    for img in tqdm(images, file=sys.stdout, ascii="░▒█", desc=" - 文本检测开始处理"):
+    for img in tqdm(images, file=sys.stdout, desc="执行文本检测"):
         detected.append(detect_text_with_ocr(img))
     gr.Info("文本检测已结束")
     output_cache = detected
     return get_output_status(output_cache)+"上次操作: 文本检测"
 
 
-def area_fill(dataset_name, is_random, color, rep_name=None):
+def area_fill(dataset_name, is_random, color, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     area = output_cache
-    gr.Info("区域填充开始处理")
     images = dataset_getImg(dataset_name, rep_name)[0]
     fill = []
     xyxy = []
     # print(" - 区域填充开始处理")
-    for img, xyxys in tzip(images, area, file=sys.stdout, ascii="░▒█", desc=" - 区域填充开始处理"):
+    for img, xyxys in tzip(images, area, file=sys.stdout, desc="执行区域填充"):
         if xyxys:
             for exy in [xyxys][0]:
                 xyxy.append(exy[0])
@@ -516,14 +517,14 @@ def area_fill(dataset_name, is_random, color, rep_name=None):
     return get_output_status(output_cache)+"上次操作: 区域填充"
 
 
-def area_blur(dataset_name, rad, rep_name=None):
+def area_blur(dataset_name, rad, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     area = output_cache
     gr.Info("区域模糊开始处理")
     images = dataset_getImg(dataset_name, rep_name)[0]
     blur = []
     xyxy = []
-    for img, xyxys in tzip(images, area, file=sys.stdout, ascii="░▒█", desc=" - 区域模糊开始处理"):
+    for img, xyxys in tzip(images, area, file=sys.stdout, desc="执行区域模糊"):
         if xyxys:
             for exy in [xyxys][0]:
                 xyxy.append(exy[0])
@@ -535,13 +536,13 @@ def area_blur(dataset_name, rad, rep_name=None):
     return get_output_status(output_cache)+"上次操作: 区域模糊"
 
 
-def crop_hw(dataset_name, rep_name=None):
+def crop_hw(dataset_name, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     mask_info = output_cache
     gr.Info("区域剪裁开始处理")
     images = dataset_getImg(dataset_name, rep_name)[0]
     result = []
-    for img, infos in zip(images, mask_info):
+    for img, infos in tzip(images, mask_info, file=sys.stdout, desc="执行区域剪裁"):
         # infos = infos[0]
         # logger.debug(infos)
         for einfo in infos:
@@ -564,7 +565,7 @@ def crop_hw(dataset_name, rep_name=None):
     return get_output_status(output_cache)+"上次操作: 区域剪裁"
 
 
-def crop_trans(dataset_name, threshold, filter_size, rep_name=None):
+def crop_trans(dataset_name, threshold, filter_size, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     if has_image(output_cache):
         images = output_cache
@@ -573,7 +574,7 @@ def crop_trans(dataset_name, threshold, filter_size, rep_name=None):
         images = dataset_getImg(dataset_name, rep_name)[0]
         gr.Info("自适应剪裁开始处理 <- 数据集")
     out = []
-    for img in tqdm(images, file=sys.stdout, desc=" - 自适应剪裁开始处理", ascii="░▒█"):
+    for img in tqdm(images, file=sys.stdout, desc="执行自适应裁剪"):
         if img is not None:
             out.append(squeeze_with_transparency(img, threshold, filter_size))
     gr.Info("自适应剪裁已结束")
@@ -581,7 +582,7 @@ def crop_trans(dataset_name, threshold, filter_size, rep_name=None):
     return get_output_status(output_cache)+"上次操作: 自适应剪裁"
 
 
-def img_segment(dataset_name, scale, rep_name=None):
+def img_segment(dataset_name, scale, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     if has_image(output_cache):
         images = output_cache
@@ -591,7 +592,7 @@ def img_segment(dataset_name, scale, rep_name=None):
         gr.Info("人物分离开始处理 <- 数据集")
     out = []
     # print(" - 人物分离开始处理")
-    for img in tqdm(images, file=sys.stdout, desc=" - 人物分离开始处理", ascii="░▒█"):
+    for img in tqdm(images, file=sys.stdout, desc="执行人物分离"):
         out.append(segment_rgba_with_isnetis(img, scale)[1])  # mask信息被丢弃了
     gr.Info("人物分离已结束")
     output_cache = out
@@ -675,7 +676,7 @@ def ref_runs(dataset_name, need_list=False):
             return gr.update(choices=runs_list)
 
 
-def run_train_lora(dataset_name, epoch, bs, toml_index, is_pipeline=False):
+def run_train_lora(dataset_name, epoch, bs, toml_index, is_pipeline=False, progress=gr.Progress(track_tqdm=True)):
     logger.info("LoRA开始训练")
     gr.Info(f"[{dataset_name}] LoRA开始训练")
     if not is_pipeline:
@@ -683,26 +684,32 @@ def run_train_lora(dataset_name, epoch, bs, toml_index, is_pipeline=False):
             raise DatasetTypeError(dataset_name, "正在尝试加载kohya数据集")
         else:
             r_dataset_name = dataset_name.replace(" (kohya)", "")
+        progress(0.1, desc="执行LoRA训练")
         kohya_train_lora(f"dataset/_kohya/{r_dataset_name}", r_dataset_name, f"runs/_kohya/{r_dataset_name}", epoch, bs, toml_index)
-        for folder_name in os.listdir(f"dataset/_kohya/{r_dataset_name}"):
+        for folder_name in tqdm(os.listdir(f"dataset/_kohya/{r_dataset_name}"), desc="提示词生成"):
             if re.match(r"\d+_", folder_name):
                 save_recommended_tags(f"dataset/_kohya/{r_dataset_name}/{folder_name}", r_dataset_name, f"runs/_kohya/{r_dataset_name}")
     else:
         r_dataset_name = dataset_name
+        progress(0.1, desc="执行LoRA训练")
         kohya_train_lora(f"pipeline/dataset/_kohya/{r_dataset_name}", r_dataset_name, f"pipeline/runs/_kohya/{r_dataset_name}", epoch, bs, toml_index)
+        progress(0.9, desc="提示词生成")
         save_recommended_tags(f"pipeline/dataset/_kohya/{r_dataset_name}/1_{r_dataset_name}", r_dataset_name, f"pipeline/runs/_kohya/{r_dataset_name}")
+    progress(1, desc="LoRA训练完成")
     return "LoRA训练完成"
 
 
-def convert_weights(dataset_name, step):
+def convert_weights(dataset_name, step, progress=gr.Progress(track_tqdm=True)):
     global output_cache
-    gr.Info("开始转换LoRA")
+    gr.Info("开始LoRA转换")
+    progress(0, desc="执行LoRA转换")
     # logging.try_init_root(logging.INFO)
     convert_to_webui_lora(f"runs/{dataset_name}/ckpts/unet-{step}.safetensors",
                           f"runs/{dataset_name}/ckpts/text_encoder-{step}.safetensors",
                           os.path.join(f"runs/{dataset_name}/ckpts", f"{dataset_name}-lora-{step}.safetensors")
                           )
     gr.Info("LoRA转换已结束")
+    progress(1, desc="LoRA转换完成")
     output_cache = []
     return "已执行转换"
 
@@ -807,7 +814,7 @@ def saving_output(dataset_name, rep_name=None, progress=gr.Progress(track_tqdm=T
         anyfiles = os.listdir(process_dir)
         for anyfile in anyfiles:
             os.remove(f"{process_dir}/{anyfile}")
-        for i, sv in enumerate(tqdm(output_cache, file=sys.stdout, desc=" - 开始保存运行结果")):
+        for i, sv in enumerate(tqdm(output_cache, file=sys.stdout, desc="保存运行结果")):
             sv.save(f"{process_dir}/{dataset_name}_{i+1}.png")
             count = count+1
         gr.Info("已保存"+str(count)+" 张图像至"+process_dir)
@@ -817,13 +824,13 @@ def saving_output(dataset_name, rep_name=None, progress=gr.Progress(track_tqdm=T
         gr.Warning("无法保存: 运行结果内没有图像")
 
 
-def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_character_thre, wd14_weight, wd14_overlap, ml_real_name, ml_thre, ml_scale, ml_weight, ml_ratio, ml_overlap, need_black, drop_presets, drop_custom, exists_txt, del_json, rep_name=None):
+def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_character_thre, wd14_weight, wd14_overlap, ml_real_name, ml_thre, ml_scale, ml_weight, ml_ratio, ml_overlap, need_black, drop_presets, drop_custom, exists_txt, del_json, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     images = dataset_getImg(dataset_name, rep_name)[0]
     img_name = dataset_getImg(dataset_name, rep_name)[1]
     if ttype == taggers[0]:
         gr.Info("数据打标开始处理 打标器: wd14")
-        for img, name in tzip(images, img_name, file=sys.stdout, ascii="░▒█", desc=" - 数据打标开始处理"):
+        for img, name in tzip(images, img_name, file=sys.stdout, desc="执行数据打标 [wd14]"):
             result = get_wd14_tags(img, wd14_tagger, wd14_general_thre, wd14_character_thre, wd14_overlap)
             if result[2]:
                 result = tags_to_text(result[1], include_score=wd14_weight)+', '+tags_to_text(result[2], include_score=wd14_weight)  # features and chars
@@ -854,7 +861,7 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
     elif ttype == taggers[1]:
         gr.Info("数据打标开始处理 打标器: mldanbooru")
         # print(" - 数据打标开始处理")
-        for img, name in tzip(images, img_name, file=sys.stdout, ascii="░▒█", desc=" - 数据打标开始处理"):
+        for img, name in tzip(images, img_name, file=sys.stdout, desc="执行数据打标 [mldanbooru]"):
             result = get_mldanbooru_tags(img, ml_real_name, ml_thre, ml_scale, ml_ratio, ml_overlap)
             result = tags_to_text(result, include_score=ml_weight)
             if need_black:
@@ -882,8 +889,7 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
     elif ttype == taggers[2]:
         gr.Info("标签解析开始处理")
         json_files = glob.glob(f'dataset/{dataset_name}/.*.json')
-        # print(" - 标签解析开始处理")
-        for json_file in tqdm(json_files, file=sys.stdout, desc=" - 标签解析开始处理", ascii="░▒█"):
+        for json_file in tqdm(json_files, file=sys.stdout, desc="执行标签解析"):
             with open(json_file, 'r') as f:
                 jdata = json.load(f)
             danbooru_data = jdata.get('danbooru', {})
@@ -991,7 +997,7 @@ def load_css():
             with open(css_file, "r") as f:
                 css_content = f.read()
             merged_css += css_content
-    logger.success("已加载css")
+    logger.success("css已加载")
     return merged_css
 
 
@@ -1024,7 +1030,7 @@ def pipeline_start_lora(ch_names, toml_index):
     return pipeline_start(ch_names, 1, toml_index)
 
 
-def pipeline_start(ch_names, train_type, toml_index=None):
+def pipeline_start(ch_names, train_type, toml_index=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     global cfg
     bs = 4
@@ -1045,12 +1051,14 @@ def pipeline_start(ch_names, train_type, toml_index=None):
             save_path = f"pipeline\\dataset\\{ch_e}"
         else:
             save_path = f"pipeline\\dataset\\_kohya\\{ch_e}\\1_{ch_e}"
+        progress(0.25, desc="[全自动训练] 数据集获取")
 ###
         source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
         source_init.attach(*actions).export(
             TextualInversionExporter(save_path)
         )
 ###
+        progress(0.5, desc=f"[全自动训练] {'LoRA' if is_kohya else 'PLoRA'}训练")
         if not is_kohya:
             run_train_plora(ch_e, bs=bs, epoc=epoc, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
         else:
@@ -1125,6 +1133,7 @@ def pipeline_start(ch_names, train_type, toml_index=None):
             else:
                 logging.info(f'Draft created, it can be seed at {url} .')
 
+        progress(0.75, desc="[全自动训练] 上传抱抱脸")
         try:
             huggingface(workdir='pipeline/runs/' + ('_kohya/' if is_kohya else '') + ch_e, repository=None, n_repeats=3, pretrained_model=_DEFAULT_INFER_MODEL, width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
         except Exception as e:
@@ -1136,6 +1145,7 @@ def pipeline_start(ch_names, train_type, toml_index=None):
         #     except Exception as e:
         #         logger.error(" - 错误:", e)
         #         raise e
+        progress(1, desc="[全自动训练] 上传Civitai")
         try:
             civitai(repository=f'AppleHarem/{ch_e}', draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=None, epochs=epoc, publish_time=None, steps=None, title=f'{ch}/{ch_e}', version_name=None, is_pipeline=True, is_kohya=is_kohya, verify=cfg.get('verify_enabled', True))
         except Exception as e:
@@ -1252,6 +1262,26 @@ if __name__ == "__main__":
             # with gr.Tab("快速获取"):
             #     fast_tag = gr.Textbox(label="Tag", placeholder="aaa,bbb|ccc,ddd", value='')
             #     fast_button = gr.Button("开始获取", variant="primary", interactive=True)
+            with gr.Tab("全自动数据集"):
+                with gr.Tab("1机"):
+                    auto_crawl_1_chars = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的数据集就出现在抱脸了》", info="要求角色名 用,分隔")
+                    auto_crawl_1_button = gr.Button("开始全自动数据集", variant="primary")
+                    auto_crawl_1_status = gr.Button("查询状态")
+                    auto_crawl_1_number = gr.Textbox(value="1", visible=False)
+                with gr.Tab("2机"):
+                    auto_crawl_2_chars = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的数据集就出现在抱脸了》", info="要求角色名 用,分隔")
+                    auto_crawl_2_button = gr.Button("开始全自动数据集", variant="primary")
+                    auto_crawl_2_status = gr.Button("查询状态")
+                    auto_crawl_2_number = gr.Textbox(value="2", visible=False)
+                with gr.Tab("3机"):
+                    auto_crawl_3_chars = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的数据集就出现在抱脸了》", info="要求角色名 用,分隔")
+                    auto_crawl_3_button = gr.Button("开始全自动数据集", variant="primary")
+                    auto_crawl_3_status = gr.Button("查询状态")
+                    auto_crawl_3_number = gr.Textbox(value="3", visible=False)
+                with gr.Accordion("使用说明", open=False):
+                    gr.Markdown("""《输入角色名然后你的数据集就出现在抱脸了》\n
+                                需要设置抱脸token\n
+                                你必须拥有组织的读写权限""")
         with gr.Tab("数据增强"):
             with gr.Tab("图像处理"):
                 with gr.Accordion("自适应剪裁"):
@@ -1446,27 +1476,7 @@ if __name__ == "__main__":
                 # 大模型权重拆解 sd 2 diffusers 格式
                 pass
             with gr.Accordion("使用说明", open=False):
-                gr.Markdown("上传权重到抱脸和C站 soon..")
-        with gr.Tab("全自动数据集"):
-            with gr.Tab("1机"):
-                auto_crawl_1_chars = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的数据集就出现在抱脸了》", info="要求角色名 用,分隔")
-                auto_crawl_1_button = gr.Button("开始全自动数据集", variant="primary")
-                auto_crawl_1_status = gr.Button("查询状态")
-                auto_crawl_1_number = gr.Textbox(value="1", visible=False)
-            with gr.Tab("2机"):
-                auto_crawl_2_chars = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的数据集就出现在抱脸了》", info="要求角色名 用,分隔")
-                auto_crawl_2_button = gr.Button("开始全自动数据集", variant="primary")
-                auto_crawl_2_status = gr.Button("查询状态")
-                auto_crawl_2_number = gr.Textbox(value="2", visible=False)
-            with gr.Tab("3机"):
-                auto_crawl_3_chars = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的数据集就出现在抱脸了》", info="要求角色名 用,分隔")
-                auto_crawl_3_button = gr.Button("开始全自动数据集", variant="primary")
-                auto_crawl_3_status = gr.Button("查询状态")
-                auto_crawl_3_number = gr.Textbox(value="3", visible=False)
-            with gr.Accordion("使用说明", open=False):
-                gr.Markdown("""《输入角色名然后你的数据集就出现在抱脸了》\n
-                            需要设置抱脸token\n
-                            你必须拥有组织的读写权限""")
+                gr.Markdown("上传权重到抱抱脸和C站 soon..")
         with gr.Tab("设置"):
             with gr.Tab("Pixiv"):
                 pixiv_token = gr.Textbox(label="刷新令牌", placeholder="不填写将无法访问Pixiv", interactive=True, value=cfg.get('pixiv_token', ''))
