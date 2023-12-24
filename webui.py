@@ -1055,7 +1055,7 @@ def pipeline_start(ch_names, train_type, toml_index=None, progress=gr.Progress(t
     global output_cache
     global cfg
     bs = 4
-    epoc = 3  # TODO default 10
+    epoc = 10
     is_kohya = bool(train_type)
     riyu = kakasi()
     actions = [NoMonochromeAction(), CCIPAction(), PersonSplitAction(),  # ccip角色聚类
@@ -1175,7 +1175,6 @@ def pipeline_start(ch_names, train_type, toml_index=None, progress=gr.Progress(t
         logger.success(" - 完成: 已完成"+ch+"角色上传")
         time.sleep(16)
     gr.Info("所有全自动训练任务完成")
-    # subprocess.call(["shutdown", "/s", "/t", "0"])  # TODO 自动关机功能
     return get_output_status(output_cache)+"所有任务完成"
 
 

@@ -567,18 +567,21 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
     else:
         raise TypeError(f'Unknown source type - {source!r}.')
     hf_fs = get_hf_fs()
-    for i in range(5):
-        if not hf_fs.exists(f'{repo}/meta.json'):
+    for i in range(200):
+        if hf_fs.exists(f'{repo}/meta.json'):
+            break
+        else:
             logging.warning("The meta json not found, retrying in 20 seconds...")
             time.sleep(20)
-        else:
-            try:
-                meta_json = json.loads(hf_fs.read_text(f'{repo}/meta.json'))
-                break
-            except json.JSONDecodeError as e:
-                logging.error(hf_fs.read_text(f'{repo}/meta.json'))
-                logging.error('Metadata loading failed.')
-                raise e
+    if not hf_fs.exists(f'{repo}/meta.json'):
+        logging.error("The meta json not found.")
+        raise FileNotFoundError
+    try:
+        meta_json = json.loads(hf_fs.read_text(f'{repo}/meta.json'))
+    except json.JSONDecodeError as e:
+        logging.error(hf_fs.read_text(f'{repo}/meta.json'))
+        logging.error('Metadata loading failed.')
+        raise e
     game_name = "" if source.split("AppleHarem/")[1].split('_')[-1] == source.split("AppleHarem/")[1] else source.split("AppleHarem/")[1].split('_')[-1]
     if session:
         session_req = get_requests_session(max_retries=5, timeout=30, verify=verify, headers=None, session=None)
