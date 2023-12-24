@@ -432,7 +432,7 @@ def export_workdir(workdir: str, export_dir: str, n_repeats: int = 2,
                 t_data.append((
                     int(epoch) if int(epoch) != best_epoch else f'**{int(epoch)}**',
                     f'{all_scores[int(epoch)]:.3f}' if int(epoch) != best_epoch else f'**{all_scores[int(epoch)]:.3f}**',
-                    f'[Download]({epoch}/*.safetensors)' if int(epoch) != best_epoch else f'[**Download**]({epoch}/*.safetensors)',
+                    f'[Download]({epoch}/{name}-{epoch}.safetensors)' if int(epoch) != best_epoch else f'[**Download**]({epoch}/{name}-{epoch}.safetensors)',
                     *d_mds,
                 ))
 

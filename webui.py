@@ -846,6 +846,7 @@ def saving_output(dataset_name, rep_name=None, progress=gr.Progress(track_tqdm=T
 
 def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_character_thre, wd14_weight, wd14_overlap, ml_real_name, ml_thre, ml_scale, ml_weight, ml_ratio, ml_overlap, need_black, drop_presets, drop_custom, exists_txt, del_json, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
+    # TODO performance optimization & kohya support
     images = dataset_getImg(dataset_name, rep_name)[0]
     img_name = dataset_getImg(dataset_name, rep_name)[1]
     if ttype == taggers[0]:
@@ -1054,7 +1055,7 @@ def pipeline_start(ch_names, train_type, toml_index=None, progress=gr.Progress(t
     global output_cache
     global cfg
     bs = 4
-    epoc = 10
+    epoc = 3  # TODO default 10
     is_kohya = bool(train_type)
     riyu = kakasi()
     actions = [NoMonochromeAction(), CCIPAction(), PersonSplitAction(),  # ccip角色聚类
@@ -1073,10 +1074,10 @@ def pipeline_start(ch_names, train_type, toml_index=None, progress=gr.Progress(t
             save_path = f"pipeline\\dataset\\_kohya\\{ch_e}\\1_{ch_e}"
         progress(0.25, desc="[全自动训练] 数据集获取")
 ###
-        source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
-        source_init.attach(*actions).export(
-            TextualInversionExporter(save_path)
-        )
+        # source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+        # source_init.attach(*actions).export(
+        #     TextualInversionExporter(save_path)
+        # )
         time.sleep(16)
 ###
         progress(0.5, desc=f"[全自动训练] {'LoRA' if is_kohya else 'PLoRA'}训练")
@@ -1169,11 +1170,7 @@ def pipeline_start(ch_names, train_type, toml_index=None, progress=gr.Progress(t
         #         raise e
         progress(1, desc="[全自动训练] 上传Civitai")
         time.sleep(16)
-        try:
-            civitai(repository=f'AppleHarem/{ch_e}', draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=None, epochs=epoc, publish_time=None, steps=None, title=f'{ch}/{ch_e}', version_name=None, is_pipeline=True, is_kohya=is_kohya, verify=cfg.get('verify_enabled', True))
-        except Exception as e:
-            logger.error(" - 错误:", e)
-            raise e
+        civitai(repository=f'AppleHarem/{ch_e}', draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=None, epochs=epoc, publish_time=None, steps=None, title=f'{ch}/{ch_e}', version_name=None, is_pipeline=True, is_kohya=is_kohya, verify=cfg.get('verify_enabled', True))
         gr.Info(f"[{ch}]" + " 全自动训练完成")
         logger.success(" - 完成: 已完成"+ch+"角色上传")
         time.sleep(16)
