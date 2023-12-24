@@ -977,11 +977,12 @@ def illu_source_limit(i_source):
     return updates
 
 
-def save_settings(p_token, f_cookie, c_token, pro_ip, pro_port, pro_enabled, ver_enabled, thm_light, thm_style):
+def save_settings(p_token, f_cookie, c_token, hf_box, pro_ip, pro_port, pro_enabled, ver_enabled, thm_light, thm_style):
     global cfg
     cfg['pixiv_token'] = p_token
     cfg['fanbox_cookie'] = f_cookie
     cfg['civitai_token'] = c_token
+    cfg['hf_token'] = hf_box
     cfg['proxie_ip'] = pro_ip
     cfg['proxie_port'] = pro_port
     cfg['proxie_enabled'] = pro_enabled
@@ -1003,6 +1004,8 @@ def load_settings():
             cfg = json.load(config)
     else:
         cfg = {}
+    if cfg.get('hf_token', ''):
+        os.environ['HF_TOKEN'] = cfg.get('hf_token', '')
     gr.Info("设置已读取")
 
 
@@ -1523,8 +1526,7 @@ if __name__ == "__main__":
             with gr.Tab("Civitai"):
                 civitai_token = gr.Textbox(label="Cookie", lines=13, placeholder="不填写无法自动上传c站", interactive=True, value=cfg.get('civitai_token', ''))
             with gr.Tab("Huggingface"):
-                hf_token_show = gr.Textbox(label="Token", value=get_hf_token(), info="Huggingface的token需要在环境变量中设置", interactive=False)
-                hf_token_ref = gr.Button("刷新token")
+                hf_token_box = gr.Textbox(label="Token", value=cfg.get('hf_token', ''), info="Huggingface的Access Token", interactive=True)
             with gr.Tab("网络设置"):
                 proxie_ip = gr.Textbox(label="代理IP地址", placeholder="代理软件的IP地址", value=cfg.get('proxie_ip', ''))
                 proxie_port = gr.Textbox(label="代理端口", placeholder="代理软件中的端口", value=cfg.get('proxie_port', ''))
@@ -1550,7 +1552,7 @@ if __name__ == "__main__":
         auto_crawl_3_status.click(auto_crawler_status, [auto_crawl_3_number], [])
         pipeline_button_plora.click(pipeline_start_plora, [pipeline_text_plora], [message_output])
         pipeline_button_lora.click(pipeline_start_lora, [pipeline_text_lora, pipeline_toml_presets], [message_output])
-        setting_save_button.click(save_settings, [pixiv_token, fanbox_cookie, civitai_token, proxie_ip, proxie_port, proxie_enabled, verify_enabled, theme_light, theme_style], [message_output])
+        setting_save_button.click(save_settings, [pixiv_token, fanbox_cookie, civitai_token, hf_token_box, proxie_ip, proxie_port, proxie_enabled, verify_enabled, theme_light, theme_style], [message_output])
         pixiv_manual_login.click(pixiv_login, [], [])
         pixiv_get_token.click(get_ref_token, [], [])
         fanbox_get_cookie.click(get_fanbox_cookie, [], [])
