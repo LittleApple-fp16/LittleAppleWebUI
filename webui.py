@@ -1074,10 +1074,10 @@ def pipeline_start(ch_names, train_type, toml_index=None, progress=gr.Progress(t
             save_path = f"pipeline\\dataset\\_kohya\\{ch_e}\\1_{ch_e}"
         progress(0.25, desc="[全自动训练] 数据集获取")
 ###
-        # source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
-        # source_init.attach(*actions).export(
-        #     TextualInversionExporter(save_path)
-        # )
+        source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+        source_init.attach(*actions).export(
+            TextualInversionExporter(save_path)
+        )
         time.sleep(16)
 ###
         progress(0.5, desc=f"[全自动训练] {'LoRA' if is_kohya else 'PLoRA'}训练")
