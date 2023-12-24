@@ -81,8 +81,10 @@ def draw_images(
 
         src_pt_file = src_pt_files[0]
         shutil.copyfile(src_pt_file, os.path.join(emb_dir, f'{emb_name}.pt'))
-        download_file(hf_hub_url(_EASY_NEG, filename=f'EasyNegative.safetensors'), 'EasyNegative.safetensors')
-        download_file(hf_hub_url(_BAD_HAND_NEG, filename=f'badhandv4.pt'), 'badhandv4.pt')
+        neg_emb_path_1 = os.path.join(emb_dir, 'EasyNegative.safetensors')
+        neg_emb_path_2 = os.path.join(emb_dir, 'badhandv4.pt')
+        download_file(hf_hub_url(_EASY_NEG, filename=f'EasyNegative.safetensors'), neg_emb_path_1)
+        download_file(hf_hub_url(_BAD_HAND_NEG, filename=f'badhandv4.pt'), neg_emb_path_2)
 
         args = {
             'pretrained_model': pretrained_model,
@@ -301,8 +303,10 @@ def draw_with_workdir_kohya(workdir: str, lora_path: str, pretrained_model: str 
             with TemporaryDirectory() as td:
                 from omegaconf import OmegaConf
                 _tmp_output_dir = output_dir or td
-                download_file(hf_hub_url(_EASY_NEG, filename=f'EasyNegative.safetensors'), 'EasyNegative.safetensors')
-                download_file(hf_hub_url(_BAD_HAND_NEG, filename=f'badhandv4.pt'), 'badhandv4.pt')
+                neg_emb_path_1 = os.path.join(td, 'EasyNegative.safetensors')
+                neg_emb_path_2 = os.path.join(td, 'badhandv4.pt')
+                download_file(hf_hub_url(_EASY_NEG, filename=f'EasyNegative.safetensors'), neg_emb_path_1)
+                download_file(hf_hub_url(_BAD_HAND_NEG, filename=f'badhandv4.pt'), neg_emb_path_2)
                 for i, (pname, prompt, n, seed, sfw) in \
                         enumerate(zip(pnames, prompts, neg_prompts, seeds, sfws), start=1):
                     args = {
@@ -315,7 +319,7 @@ def draw_with_workdir_kohya(workdir: str, lora_path: str, pretrained_model: str 
                         'outdir': _tmp_output_dir,
                         'clip_skip': clip_skip,
                         'sampler': 'euler',
-                        'textual_inversion_embeddings': ['EasyNegative.safetensors', 'badhandv4.pt'],
+                        'textual_inversion_embeddings': [neg_emb_path_1, neg_emb_path_2],
                         'vae': _VAE_MSE
                     }
                     cfgs = OmegaConf.merge(OmegaConf.load(kohya_cfg_file), args)

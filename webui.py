@@ -190,6 +190,7 @@ def download_illust(i_name, i_source, i_maxsize=None, progress=gr.Progress(track
         if 1 in i_source:
             kemono_dl(kemono_arg)
         gr.Info(i_name+" 数据集获取已结束")
+        logger.success(f'{i_name} 数据集获取完成')
         output_cache = []
         return "下载已结束"
     except Exception as exp:
@@ -288,6 +289,7 @@ async def illu_getter(pic, progress=gr.Progress(track_tqdm=True)):
             client=client
         )
         progress(0.6, desc="搜索作品信息")
+        logging.info("搜索画师作品...")
         resp = await ascii2d.search(file=pic)
         selected = None
         for i in tqdm(resp.raw, desc="筛选作品信息"):
@@ -297,10 +299,12 @@ async def illu_getter(pic, progress=gr.Progress(track_tqdm=True)):
         if selected is None:
             output_cache = []
             gr.Warning("未找到对应画师")
+            logger.warning("未找到对应画师")
             return "未找到", ""
         else:
             output_cache = []
-            gr.Info("画师 "+selected.author+"的作品 "+selected.title)
+            gr.Info(f"画师 + {selected.author}的作品 {selected.title}")
+            logger.success(f"画师 + {selected.author}的作品 {selected.title}")
             return selected.author + " (" + selected.author_url + ") " + "的作品:" + selected.title, selected.author  # re.search(r'\d+$', selected.author_url).group()
 
 
@@ -309,9 +313,11 @@ def clustering(dataset_name, thre, rep_name=None, progress=gr.Progress(track_tqd
     if has_image(output_cache):
         images = output_cache
         gr.Info("差分过滤开始处理 <- 缓存")
+        logging.info("从缓存结果执行差分过滤...")
     else:
         images = dataset_getImg(dataset_name, rep_name)[0]
         gr.Info("差分过滤开始处理 <- 数据集")
+        logging.info("从数据集执行差分过滤...")
     # print(clusters)
     clustered_imgs = []
     added_clusters = set()  # 创建一个集合 其中存储已经添加过的标签 此集合将约束被过滤的img列表 集合中的元素无法dup
@@ -323,6 +329,7 @@ def clustering(dataset_name, thre, rep_name=None, progress=gr.Progress(track_tqd
             clustered_imgs.append(images[i])
             added_clusters.add(cluster)
     gr.Info("差分过滤已结束")
+    logger.success("差分过滤完成")
     output_cache = clustered_imgs
     return get_output_status(output_cache)+"上次操作: 差分过滤"
 
@@ -334,6 +341,7 @@ def three_stage(dataset_name, rep_name=None, progress=gr.Progress(track_tqdm=Tru
         if dataset_name.endswith("_processed"):
             process_dir = f"dataset/{dataset_name}"
             gr.Warning("你正在覆盖此数据集")
+            logger.warning("程序生成的数据集正被覆盖")
         else:
             process_dir = f"dataset/{dataset_name}_processed"
         local_source = LocalSource(f"dataset/{dataset_name}")
@@ -345,11 +353,13 @@ def three_stage(dataset_name, rep_name=None, progress=gr.Progress(track_tqdm=Tru
         repeat = int(re.search(r'(\d+)_.*', rep_name).group(1))//2
         if re.search(r'\d+_(.*)', rep_name).group(1) == 'processed':
             gr.Warning("你正在覆盖此循环")
+            logger.warning("程序生成的循环正被覆盖")
         local_source.attach(
             ThreeStageSplitAction(),
         ).export(TextualInversionExporter(f'dataset/_kohya/{dataset_name.replace(" (kohya)", "")}/{str(repeat) if repeat != 0 else str(1)}_processed', True))
 
     gr.Info("三阶分割已结束")
+    logger.success("三阶分割完成")
     output_cache = []
     return "操作结束 | "+"上次操作: 三阶分割"
 
@@ -375,6 +385,7 @@ def three_stage_pickup(progress=gr.Progress(track_tqdm=True)):
             ThreeStageSplitAction(),
         ).export(TextualInversionExporter(output_folder, True))
     gr.Info("三阶分割已结束")
+    logger.success("三阶分割完成")
     output_cache = []
     return "操作结束 | " + "上次操作: 三阶分割"
 
@@ -393,6 +404,7 @@ def mirror_process(progress=gr.Progress(track_tqdm=True)):
         else:
             break
     gr.Info("快速镜像开始处理")
+    logging.info("快速镜像开始处理")
     for i_pth in pths:
         output_folder = i_pth + '_mirror'
         os.makedirs(output_folder, exist_ok=False)
@@ -437,9 +449,11 @@ def face_detect(dataset_name, level, version, max_infer_size, conf_threshold, io
     if has_image(output_cache):
         images = output_cache
         gr.Info("面部检测开始处理 <- 缓存")
+        logging.info("从缓存结果执行面部检测...")
     else:
         images = dataset_getImg(dataset_name, rep_name)[0]
         gr.Info("面部检测开始处理 <- 数据集")
+        logging.info("从数据集执行面部检测...")
     detected = []
     if level:
         level = "s"
@@ -450,6 +464,7 @@ def face_detect(dataset_name, level, version, max_infer_size, conf_threshold, io
     for img in tqdm(images, file=sys.stdout, desc="执行面部检测"):
         detected.append(detect_faces(img, level, version, max_infer_size, conf_threshold, iou_threshold))
     gr.Info("面部检测已结束")
+    logger.success("面部检测完成")
     output_cache = detected
     return get_output_status(output_cache)+"上次操作: 面部检测"
 
@@ -459,9 +474,11 @@ def head_detect(dataset_name, level, max_infer_size, conf_threshold, iou_thresho
     if has_image(output_cache):
         images = output_cache
         gr.Info("头部检测开始处理 <- 缓存")
+        logging.info("从缓存结果执行头部检测...")
     else:
         images = dataset_getImg(dataset_name, rep_name)[0]
         gr.Info("头部检测开始处理 <- 数据集")
+        logging.info("从数据集执行头部检测...")
     detected = []
     if level:
         level = "s"
@@ -472,6 +489,7 @@ def head_detect(dataset_name, level, max_infer_size, conf_threshold, iou_thresho
     for img in tqdm(images, file=sys.stdout, desc="执行头部检测"):
         detected.append(detect_heads(img, level, max_infer_size, conf_threshold, iou_threshold))
     gr.Info("头部检测已结束")
+    logger.success("头部检测完成")
     output_cache = detected
     return get_output_status(output_cache)+"上次操作: 头部检测"
 
@@ -481,13 +499,16 @@ def text_detect(dataset_name, rep_name=None, progress=gr.Progress(track_tqdm=Tru
     if has_image(output_cache):
         images = output_cache
         gr.Info("文本检测开始处理 <- 缓存")
+        logging.info("从缓存结果执行文本检测...")
     else:
         images = dataset_getImg(dataset_name, rep_name)[0]
         gr.Info("文本检测开始处理 <- 数据集")
+        logging.info("从数据集执行文本检测...")
     detected = []
     for img in tqdm(images, file=sys.stdout, desc="执行文本检测"):
         detected.append(detect_text_with_ocr(img))
     gr.Info("文本检测已结束")
+    logger.success("文本检测完成")
     output_cache = detected
     return get_output_status(output_cache)+"上次操作: 文本检测"
 
@@ -657,7 +678,6 @@ def ref_runs(dataset_name, need_list=False):
     try:
         with os.scandir(f"runs/{dataset_name}/ckpts") as conv_list:
             for conv in conv_list:
-                # print("遍历了一个conv")
                 if conv.is_file():
                     if conv.name.endswith('.pt') and not dataset_name == '_kohya':
                         runs_list.append(conv.name.replace(dataset_name+"-", "").replace(".pt", ""))
@@ -1057,6 +1077,7 @@ def pipeline_start(ch_names, train_type, toml_index=None, progress=gr.Progress(t
         source_init.attach(*actions).export(
             TextualInversionExporter(save_path)
         )
+        time.sleep(16)
 ###
         progress(0.5, desc=f"[全自动训练] {'LoRA' if is_kohya else 'PLoRA'}训练")
         if not is_kohya:
@@ -1134,6 +1155,7 @@ def pipeline_start(ch_names, train_type, toml_index=None, progress=gr.Progress(t
                 logging.info(f'Draft created, it can be seed at {url} .')
 
         progress(0.75, desc="[全自动训练] 上传抱抱脸")
+        time.sleep(16)
         try:
             huggingface(workdir='pipeline/runs/' + ('_kohya/' if is_kohya else '') + ch_e, repository=None, n_repeats=3, pretrained_model=_DEFAULT_INFER_MODEL, width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
         except Exception as e:
@@ -1146,6 +1168,7 @@ def pipeline_start(ch_names, train_type, toml_index=None, progress=gr.Progress(t
         #         logger.error(" - 错误:", e)
         #         raise e
         progress(1, desc="[全自动训练] 上传Civitai")
+        time.sleep(16)
         try:
             civitai(repository=f'AppleHarem/{ch_e}', draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=None, epochs=epoc, publish_time=None, steps=None, title=f'{ch}/{ch_e}', version_name=None, is_pipeline=True, is_kohya=is_kohya, verify=cfg.get('verify_enabled', True))
         except Exception as e:
@@ -1153,8 +1176,9 @@ def pipeline_start(ch_names, train_type, toml_index=None, progress=gr.Progress(t
             raise e
         gr.Info(f"[{ch}]" + " 全自动训练完成")
         logger.success(" - 完成: 已完成"+ch+"角色上传")
+        time.sleep(16)
     gr.Info("所有全自动训练任务完成")
-    subprocess.call(["shutdown", "/s", "/t", "0"])  # TODO 自动关机功能
+    # subprocess.call(["shutdown", "/s", "/t", "0"])  # TODO 自动关机功能
     return get_output_status(output_cache)+"所有任务完成"
 
 
@@ -1264,23 +1288,23 @@ if __name__ == "__main__":
             #     fast_button = gr.Button("开始获取", variant="primary", interactive=True)
             with gr.Tab("全自动数据集"):
                 with gr.Tab("1机"):
-                    auto_crawl_1_chars = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的数据集就出现在抱脸了》", info="要求角色名 用,分隔")
+                    auto_crawl_1_chars = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的数据集就出现在抱抱脸了》", info="要求角色名 用,分隔")
                     auto_crawl_1_button = gr.Button("开始全自动数据集", variant="primary")
                     auto_crawl_1_status = gr.Button("查询状态")
                     auto_crawl_1_number = gr.Textbox(value="1", visible=False)
                 with gr.Tab("2机"):
-                    auto_crawl_2_chars = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的数据集就出现在抱脸了》", info="要求角色名 用,分隔")
+                    auto_crawl_2_chars = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的数据集就出现在抱抱脸了》", info="要求角色名 用,分隔")
                     auto_crawl_2_button = gr.Button("开始全自动数据集", variant="primary")
                     auto_crawl_2_status = gr.Button("查询状态")
                     auto_crawl_2_number = gr.Textbox(value="2", visible=False)
                 with gr.Tab("3机"):
-                    auto_crawl_3_chars = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的数据集就出现在抱脸了》", info="要求角色名 用,分隔")
+                    auto_crawl_3_chars = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的数据集就出现在抱抱脸了》", info="要求角色名 用,分隔")
                     auto_crawl_3_button = gr.Button("开始全自动数据集", variant="primary")
                     auto_crawl_3_status = gr.Button("查询状态")
                     auto_crawl_3_number = gr.Textbox(value="3", visible=False)
                 with gr.Accordion("使用说明", open=False):
-                    gr.Markdown("""《输入角色名然后你的数据集就出现在抱脸了》\n
-                                需要设置抱脸token\n
+                    gr.Markdown("""《输入角色名然后你的数据集就出现在抱抱脸了》\n
+                                需要设置抱抱脸token\n
                                 你必须拥有组织的读写权限""")
         with gr.Tab("数据增强"):
             with gr.Tab("图像处理"):

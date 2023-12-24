@@ -36,7 +36,7 @@ if not exist %VENV_NAME% (
         )
     )
 
-    python -m pip install xformers==0.0.22 --no-deps
+    python -m pip install xformers==0.0.23 --index-url https://download.pytorch.org/whl/cu118 --no-deps
     pip install -r requirements.txt
     echo [info] Done. Please restart.
     pause
