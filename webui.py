@@ -677,7 +677,7 @@ def ref_custom_toml(need_list=False):
     from kohya.train_network import _TOML_PRESET as toml_preset
     from pathlib import Path
     custom_toml = []
-    toml_files = [file.replace("kohya/toml/", "") for file in [Path(path).as_posix() for path in glob.glob(f"kohya/toml/**/*.toml", recursive=True)] if file not in toml_preset]
+    toml_files = [file.replace("kohya/toml/", "") for file in [Path(path).as_posix() for path in glob.glob("kohya/toml/**/*.toml", recursive=True)] + [Path(path).as_posix() for path in glob.glob("kohya/toml/**/*.json", recursive=True)] if file not in toml_preset]
     if need_list:
         return toml_files
     else:
@@ -709,32 +709,40 @@ def ref_runs(dataset_name, need_list=False):
 
 
 def run_train_lora(dataset_name, epoch, bs, toml_index, custom_toml_name=None, is_pipeline=False, is_batch=False, batch_name=None, progress=gr.Progress(track_tqdm=True)):
+    import tempfile
+    import toml
     logger.info("LoRA开始训练")
     gr.Info(f"[{dataset_name}] LoRA开始训练")
-    if toml_index == 3:
-        toml_index = custom_toml_name
-        logger.success(f"参数已加载: {custom_toml_name}")
-    if not is_pipeline:
-        if is_batch:
-            batch_list = batch_name
-        else:
-            batch_list = [dataset_name]
-        for dataset in batch_list:
-            if not dataset.endswith(' (kohya)'):  # from dataset_dropdown
-                raise DatasetTypeError(dataset, "正在尝试加载kohya数据集")
+    with tempfile.NamedTemporaryFile(suffix=".toml", delete=False) as tt:
+        if toml_index == 3:
+            toml_index = custom_toml_name
+            if custom_toml_name.split(".")[-1] == 'json':
+                with open(f'kohya/toml/{custom_toml_name}', 'r') as json_file:
+                    tt.write(toml.dumps(json.load(json_file)).encode())
+                    tt.flush()
+                toml_index = tt.name
+            logger.success(f"参数已加载: {custom_toml_name}")
+        if not is_pipeline:
+            if is_batch:
+                batch_list = batch_name
             else:
-                r_dataset_name = dataset.replace(" (kohya)", "")
+                batch_list = [dataset_name]
+            for dataset in batch_list:
+                if not dataset.endswith(' (kohya)'):  # from dataset_dropdown
+                    raise DatasetTypeError(dataset, "正在尝试加载kohya数据集")
+                else:
+                    r_dataset_name = dataset.replace(" (kohya)", "")
+                progress(0.1, desc="执行LoRA训练")
+                kohya_train_lora(f"dataset/_kohya/{r_dataset_name}", r_dataset_name, f"runs/_kohya/{r_dataset_name}", epoch, bs, toml_index)
+                for folder_name in tqdm(os.listdir(f"dataset/_kohya/{r_dataset_name}"), desc="提示词生成"):
+                    if re.match(r"\d+_", folder_name):
+                        save_recommended_tags(f"dataset/_kohya/{r_dataset_name}/{folder_name}", r_dataset_name, f"runs/_kohya/{r_dataset_name}")
+        else:
+            r_dataset_name = dataset_name
             progress(0.1, desc="执行LoRA训练")
-            kohya_train_lora(f"dataset/_kohya/{r_dataset_name}", r_dataset_name, f"runs/_kohya/{r_dataset_name}", epoch, bs, toml_index)
-            for folder_name in tqdm(os.listdir(f"dataset/_kohya/{r_dataset_name}"), desc="提示词生成"):
-                if re.match(r"\d+_", folder_name):
-                    save_recommended_tags(f"dataset/_kohya/{r_dataset_name}/{folder_name}", r_dataset_name, f"runs/_kohya/{r_dataset_name}")
-    else:
-        r_dataset_name = dataset_name
-        progress(0.1, desc="执行LoRA训练")
-        kohya_train_lora(f"pipeline/dataset/_kohya/{r_dataset_name}", r_dataset_name, f"pipeline/runs/_kohya/{r_dataset_name}", epoch, bs, toml_index)
-        progress(0.9, desc="提示词生成")
-        save_recommended_tags(f"pipeline/dataset/_kohya/{r_dataset_name}/1_{r_dataset_name}", r_dataset_name, f"pipeline/runs/_kohya/{r_dataset_name}")
+            kohya_train_lora(f"pipeline/dataset/_kohya/{r_dataset_name}", r_dataset_name, f"pipeline/runs/_kohya/{r_dataset_name}", epoch, bs, toml_index)
+            progress(0.9, desc="提示词生成")
+            save_recommended_tags(f"pipeline/dataset/_kohya/{r_dataset_name}/1_{r_dataset_name}", r_dataset_name, f"pipeline/runs/_kohya/{r_dataset_name}")
     progress(1, desc="LoRA训练完成")
     return "LoRA训练完成"
 
@@ -1520,7 +1528,7 @@ if __name__ == "__main__":
             with gr.Tab("全自动训练") as tab_pipeline_lora:
                 pipeline_text_lora = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的模型就出现在c站了》", info="要求角色名 用,分隔")
                 pipeline_toml_presets = gr.Radio(toml_presets, label="参数", info="通用化的参数预设", type="index", value="默认")
-                with gr.Column(visible=lora_toml_presets.value == 3, elem_classes="drop_custom_setting") as toml_custom_setting:
+                with gr.Column(visible=pipeline_toml_presets.value == 3, elem_classes="drop_custom_setting") as pipe_toml_custom_setting:
                     pipe_toml_custom_dropdown = gr.Dropdown(ref_custom_toml(True), value=ref_custom_toml(True)[0], label="自定义参数", interactive=True, info="参数路径kohya/toml", filterable=False)
                     pipe_ref_toml_button = gr.Button("🔄", elem_classes='refresh_custom_list')
                 pipeline_button_lora = gr.Button("开始全自动训练", variant="primary")
@@ -1528,6 +1536,7 @@ if __name__ == "__main__":
                     gr.Markdown("""《输入角色名然后你的模型就出现在c站了》\n
                                 需要在设置中设置c站token\n
                                 需要在计算机中添加环境变量: 键名 HF_TOKEN 值: 从登录的HuggingFace网站获取 在账号设置中创建访问令牌""")
+                pipeline_toml_presets.select(custom_toml_ctrl, pipeline_toml_presets, [pipe_toml_custom_setting])
         with gr.Tab("质量评估"):
             with gr.Accordion("使用说明", open=False):
                 gr.Markdown("soon...")
