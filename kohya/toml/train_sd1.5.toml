@@ -1,3 +1,4 @@
+config_file = "kohya/toml/train_sd1.5.toml"
 [Basics]
 pretrained_model_name_or_path = "deepghs/animefull-latest"
 train_data_dir = ""
@@ -29,10 +30,7 @@ network_dropout = 0
 network_train_unet_only = true
 network_train_text_encoder_only = false
 resume = false
-
-[LyCORIS]
-network_module = "lycoris.kohya"
-network_args = [ "preset=attn-mlp", "algo=lora",]
+network_module = "networks.lora"
 
 [Optimizer]
 train_batch_size = 8
@@ -54,7 +52,7 @@ lr_scheduler_power = 1.0
 [Training_preciscion]
 mixed_precision = "bf16"
 full_fp16 = false
-full_bf16 = true
+full_bf16 = false
 
 [Further_improvement]
 min_snr_gamma = 0
@@ -94,9 +92,6 @@ cache_latents = true
 vae_batch_size = 1
 cache_latents_to_disk = true
 
-[Sampling_during_training]
-sample_sampler = "ddim"
-
 [Logging]
 logging_dir = "logs_training"
 log_with = "tensorboard"
@@ -109,11 +104,6 @@ dataset_repeats = 1
 
 [Regularization]
 prior_loss_weight = 1.0
-
-[Huggingface]
-save_state_to_huggingface = false
-resume_from_huggingface = false
-async_upload = false
 
 [Debugging]
 debug_dataset = false

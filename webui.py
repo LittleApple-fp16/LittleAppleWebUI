@@ -945,7 +945,7 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
         gr.Info("数据打标已结束")
     elif ttype == taggers[2]:
         gr.Info("标签解析开始处理")
-        json_files = glob.glob(f'dataset/{dataset_name}/.*.json')
+        json_files = glob.glob(f'dataset/{dataset_name}/*.json')
         for json_file in tqdm(json_files, file=sys.stdout, desc="执行标签解析"):
             with open(json_file, 'r') as f:
                 jdata = json.load(f)
@@ -1196,11 +1196,7 @@ def pipeline_start(ch_names, train_type, toml_index=None, toml_name=None, progre
 
         progress(0.75, desc="[全自动训练] 上传抱抱脸")
         time.sleep(16)
-        try:
-            huggingface(workdir='pipeline/runs/' + ('_kohya/' if is_kohya else '') + ch_e, repository=None, n_repeats=3, pretrained_model=_DEFAULT_INFER_MODEL, width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
-        except Exception as e:
-            logger.error(" - 错误:", e)
-            raise e
+        huggingface(workdir='pipeline/runs/' + ('_kohya/' if is_kohya else '') + ch_e, repository=None, n_repeats=3, pretrained_model=_DEFAULT_INFER_MODEL, width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
         # if not is_kohya:
         #     try:
         #         rehf(repository=f'AppleHarem/{ch_e}', n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
@@ -1209,7 +1205,16 @@ def pipeline_start(ch_names, train_type, toml_index=None, toml_name=None, progre
         #         raise e
         progress(1, desc="[全自动训练] 上传Civitai")
         time.sleep(16)
-        civitai(repository=f'AppleHarem/{ch_e}', draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=None, epochs=epoc, publish_time=None, steps=None, title=f'{ch}/{ch_e}', version_name=None, is_pipeline=True, is_kohya=is_kohya, verify=cfg.get('verify_enabled', True))
+        hf_fs = cyber_get_hf_fs()
+        for i in range(200):
+            if hf_fs.exists(f'AppleHarem/{ch_e}/meta.json'):
+                civitai(repository=f'AppleHarem/{ch_e}', draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=None, epochs=epoc, publish_time=None, steps=None, title=f'{ch}/{ch_e}', version_name=None, is_pipeline=True, is_kohya=is_kohya, verify=cfg.get('verify_enabled', True))
+            else:
+                logging.warning(f"AppleHarem/{ch_e}/meta.json not found, retrying in 20 seconds...")
+                time.sleep(20)
+        if not hf_fs.exists(f'AppleHarem/{ch_e}/meta.json'):
+            logging.error("The meta json not found.")
+            raise FileNotFoundError
         gr.Info(f"[{ch}]" + " 全自动训练完成")
         logger.success(" - 完成: 已完成"+ch+"角色上传")
         time.sleep(16)

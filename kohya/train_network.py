@@ -1015,7 +1015,6 @@ def kohya_train_lora(v_train_data_dir, v_output_name, v_output_dir, v_epoch, v_b
     else:
         toml_file = f'kohya/toml/{toml_index}'
     args = parser.parse_args(['--config_file', toml_file])
-    # args = argparse.Namespace()
     args.config_file = toml_file
     args.train_data_dir = v_train_data_dir
     args.output_name = v_output_name
@@ -1023,10 +1022,10 @@ def kohya_train_lora(v_train_data_dir, v_output_name, v_output_dir, v_epoch, v_b
     args.max_train_epochs = v_epoch
     args.train_batch_size = v_bs
     args = train_util.read_config_from_file(args, parser)
-    args = parser.parse_args(['--config_file', toml_file,
-                             '--train_data_dir', v_train_data_dir,
-                             '--output_name', v_output_name,
-                             '--output_dir', v_output_dir], namespace=args)
+    # args = parser.parse_args(['--config_file', toml_file,
+    #                          '--train_data_dir', v_train_data_dir,
+    #                          '--output_name', v_output_name,
+    #                          '--output_dir', v_output_dir], namespace=args)
     trainer = NetworkTrainer()
     trainer.train(args)
 
