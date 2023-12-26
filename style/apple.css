@@ -1,4 +1,4 @@
-#refresh_datasets {
+.refresh_datasets {
     max-width: 2.2em;
     min-width: 2.2em !important;
     height: 2.4em;
@@ -22,7 +22,7 @@
     top: 1.9em;
 }
 
-#dataset_dropbar {
+.dataset_dropbar {
     max-width: 36em;
     background: none;
 }
@@ -32,7 +32,7 @@
     background: none;
 }
 
-#dataset_dropbar div.wrap.wrap.wrap.wrap {
+#quick_dataset div.wrap.wrap.wrap.wrap {
     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
@@ -48,10 +48,10 @@
     background-color: transparent !important;
 }
 
-#drop_custom_setting {
+.drop_custom_setting {
     justify-content: center;
     align-items: center;
-    flex-direction: row;
+    flex-direction: row !important;
 }
 
 #convert_lora_steps {
@@ -62,7 +62,7 @@
 #drop_custom_setting>div {
     /*background-color: transparent !important;*/
 }
-#dataset_dropbar>label>span {
+#quick_dataset>label>span {
     margin-bottom: 0;
 }
 
@@ -74,7 +74,7 @@
         /*width: 95% !important;*/
 }
 
-#refresh_custom_list{
+.refresh_custom_list{
     /*top: 51%;*/
     /*left: 94.6%;*/
     /*position: absolute;*/
@@ -82,8 +82,8 @@
     /*right: -915px;*/
     /*top: -69px;*/
     /*position: relative;*/
-    width: 2.5em;
-    height: 2.5em;
+    width: 2.5em !important;
+    height: 2.5em !important;
 }
 
 #save_output {

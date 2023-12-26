@@ -659,7 +659,7 @@ def ref_kohya_rep(kohya_dataset, need_list=False):
             return gr.update(choices=None)
 
 
-def ref_customList(need_list=False):
+def ref_custom_blacklist(need_list=False):
     custom_blacklist = []
     with os.scandir("cfgs/blacklist") as blacklists:
         for each_black in blacklists:
@@ -671,6 +671,18 @@ def ref_customList(need_list=False):
     else:
         gr.Info("标签黑名单已更新")
         return gr.update(choices=custom_blacklist)
+
+
+def ref_custom_toml(need_list=False):
+    from kohya.train_network import _TOML_PRESET as toml_preset
+    from pathlib import Path
+    custom_toml = []
+    toml_files = [file.replace("kohya/toml/", "") for file in [Path(path).as_posix() for path in glob.glob(f"kohya/toml/**/*.toml", recursive=True)] if file not in toml_preset]
+    if need_list:
+        return toml_files
+    else:
+        gr.Info("自定义参数已更新")
+        return gr.update(choices=toml_files)
 
 
 def ref_runs(dataset_name, need_list=False):
@@ -696,19 +708,27 @@ def ref_runs(dataset_name, need_list=False):
             return gr.update(choices=runs_list)
 
 
-def run_train_lora(dataset_name, epoch, bs, toml_index, is_pipeline=False, progress=gr.Progress(track_tqdm=True)):
+def run_train_lora(dataset_name, epoch, bs, toml_index, custom_toml_name=None, is_pipeline=False, is_batch=False, batch_name=None, progress=gr.Progress(track_tqdm=True)):
     logger.info("LoRA开始训练")
     gr.Info(f"[{dataset_name}] LoRA开始训练")
+    if toml_index == 3:
+        toml_index = custom_toml_name
+        logger.success(f"参数已加载: {custom_toml_name}")
     if not is_pipeline:
-        if not dataset_name.endswith(' (kohya)'):  # from dataset_dropdown
-            raise DatasetTypeError(dataset_name, "正在尝试加载kohya数据集")
+        if is_batch:
+            batch_list = batch_name
         else:
-            r_dataset_name = dataset_name.replace(" (kohya)", "")
-        progress(0.1, desc="执行LoRA训练")
-        kohya_train_lora(f"dataset/_kohya/{r_dataset_name}", r_dataset_name, f"runs/_kohya/{r_dataset_name}", epoch, bs, toml_index)
-        for folder_name in tqdm(os.listdir(f"dataset/_kohya/{r_dataset_name}"), desc="提示词生成"):
-            if re.match(r"\d+_", folder_name):
-                save_recommended_tags(f"dataset/_kohya/{r_dataset_name}/{folder_name}", r_dataset_name, f"runs/_kohya/{r_dataset_name}")
+            batch_list = [dataset_name]
+        for dataset in batch_list:
+            if not dataset.endswith(' (kohya)'):  # from dataset_dropdown
+                raise DatasetTypeError(dataset, "正在尝试加载kohya数据集")
+            else:
+                r_dataset_name = dataset.replace(" (kohya)", "")
+            progress(0.1, desc="执行LoRA训练")
+            kohya_train_lora(f"dataset/_kohya/{r_dataset_name}", r_dataset_name, f"runs/_kohya/{r_dataset_name}", epoch, bs, toml_index)
+            for folder_name in tqdm(os.listdir(f"dataset/_kohya/{r_dataset_name}"), desc="提示词生成"):
+                if re.match(r"\d+_", folder_name):
+                    save_recommended_tags(f"dataset/_kohya/{r_dataset_name}/{folder_name}", r_dataset_name, f"runs/_kohya/{r_dataset_name}")
     else:
         r_dataset_name = dataset_name
         progress(0.1, desc="执行LoRA训练")
@@ -781,10 +801,14 @@ def kohya_rep_ctrl(evt: gr.SelectData):
 def custom_blacklist_ctrl(use_presets):
     updates = {}
     if use_presets:
-        updates[drop_custom_setting] = gr.update(visible=False)
+        updates[black_custom_setting] = gr.update(visible=False)
     else:
-        updates[drop_custom_setting] = gr.update(visible=True)
+        updates[black_custom_setting] = gr.update(visible=True)
     return updates
+
+
+def custom_toml_ctrl(toml_index):
+    return gr.update(visible=toml_index == 3)
 
 
 def pixiv_setting_ctrl(evt: gr.SelectData):
@@ -803,6 +827,10 @@ def color_picker_ctrl(is_random):
     else:
         updates[areaf_color] = gr.update(visible=True)
     return updates
+
+
+def fast_batch_train_ctrl(evt: gr.SelectData):
+    return gr.update(visible=evt.value)
 
 
 def save_output_ctrl():
@@ -1050,11 +1078,11 @@ def pipeline_start_plora(ch_names):
     return pipeline_start(ch_names, 0)
 
 
-def pipeline_start_lora(ch_names, toml_index):
-    return pipeline_start(ch_names, 1, toml_index)
+def pipeline_start_lora(ch_names, toml_index, custom_toml=None):
+    return pipeline_start(ch_names, 1, toml_index, custom_toml)
 
 
-def pipeline_start(ch_names, train_type, toml_index=None, progress=gr.Progress(track_tqdm=True)):
+def pipeline_start(ch_names, train_type, toml_index=None, toml_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     global cfg
     bs = 4
@@ -1087,7 +1115,7 @@ def pipeline_start(ch_names, train_type, toml_index=None, progress=gr.Progress(t
         if not is_kohya:
             run_train_plora(ch_e, bs=bs, epoc=epoc, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
         else:
-            run_train_lora(ch_e, bs=bs, epoch=epoc, toml_index=toml_index, is_pipeline=True)
+            run_train_lora(ch_e, bs=bs, epoch=epoc, toml_index=toml_index, custom_toml_name=toml_name, is_pipeline=True)
 ###
 
         def huggingface(workdir: str, repository, revision, n_repeats, pretrained_model,
@@ -1236,8 +1264,8 @@ if __name__ == "__main__":
     with gr.Blocks(css=load_css(), analytics_enabled=False) as iblock:
         quicksettings = gr.Row(elem_id="quicksettings")
         with quicksettings:
-            dataset_dropdown = gr.Dropdown(ref_datasets(True), label="当前数据集", value=ref_datasets(True)[0], container=True, show_label=True, interactive=True, elem_id='dataset_dropbar')
-            ref_datasets_button = gr.Button("🔄", elem_id='refresh_datasets')
+            dataset_dropdown = gr.Dropdown(ref_datasets(True), label="当前数据集", value=ref_datasets(True)[0], container=True, show_label=True, interactive=True, elem_classes='dataset_dropbar', elem_id='quick_dataset')
+            ref_datasets_button = gr.Button("🔄", elem_classes='refresh_datasets')
             reps = ref_kohya_rep(dataset_dropdown.value, True)
             kohya_rep_dropdown = gr.Dropdown(reps, label="当前循环", value=reps[0] if reps else [], visible=False, elem_id='rep_dropbar', interactive=True, filterable=False)
             ref_rep_button = gr.Button("🔄", elem_id='refresh_reps', visible=False, interactive=True)
@@ -1440,20 +1468,24 @@ if __name__ == "__main__":
             use_blacklist = gr.Checkbox(label="使用黑名单", value=True, interactive=True)
             with gr.Column(visible=use_blacklist.value) as tagger_dropper_settings:
                 drop_use_presets = gr.Checkbox(value=True, label="使用在线黑名单", info="获取在线黑名单，来自alea31435", interactive=True)
-                with gr.Column(visible=not drop_use_presets.value, elem_id="drop_custom_setting") as drop_custom_setting:
-                    drop_custom_list = gr.Dropdown(ref_customList(True), value=ref_customList(True)[0], label="自定义黑名单", elem_id="custom_list", interactive=True, info="黑名单路径cfgs/blacklist/")
-                    drop_ref_button = gr.Button("🔄", elem_id='refresh_custom_list')
+                with gr.Column(visible=not drop_use_presets.value, elem_classes="drop_custom_setting") as black_custom_setting:
+                    drop_custom_blacklist = gr.Dropdown(ref_custom_blacklist(True), value=ref_custom_blacklist(True)[0], label="自定义黑名单", elem_id="custom_list", interactive=True, info="黑名单路径cfgs/blacklist/", filterable=False)
+                    drop_ref_button = gr.Button("🔄", elem_classes='refresh_custom_list')
             op_exists_txt = gr.Dropdown(["复制文件", "忽略文件", "覆盖文件", "附加标签"], value="附加标签", info="对于已存在标签，打标器的行为", show_label=False, interactive=True, filterable=False)
             tagger_button = gr.Button("打标", variant="primary")
             # tagger_type.select(tagger_chooser_ctrl, None, [globals()[f'tagger_{("dropper" if tagger == "标签黑名单" else tagger)}_settings'] for tagger in taggers])
             tagger_type.select(tagger_chooser_ctrl, None, [globals()[f'tagger_{("anal" if tagger == "json解析" else tagger)}_settings'] for tagger in taggers])
             use_blacklist.select(blacklist_settings_ctrl, [use_blacklist], [tagger_dropper_settings])
-            drop_use_presets.select(custom_blacklist_ctrl, [drop_use_presets], [drop_custom_setting])
+            drop_use_presets.select(custom_blacklist_ctrl, [drop_use_presets], [black_custom_setting])
         with gr.Tab("PLoRA训练"):
             with gr.Tab("快速训练"):
                 plora_min_step = gr.Textbox(label="最小步数", value='', placeholder='不填写将自动计算')
                 plora_epoch = gr.Slider(1, 100, label="Epoch", value=10)
                 plora_batch_size = gr.Slider(1, 64, label="Batch Size", value=4, step=1)
+                plora_batch_train = gr.Checkbox(label="批量训练", value=False)
+                with gr.Column(visible=plora_batch_train.value, elem_classes="drop_custom_setting") as batch_plora_setting:
+                    plora_dataset_dropdown = gr.Dropdown(ref_datasets(True), label="多选数据集", value=ref_datasets(True)[0], container=True, show_label=True, interactive=True, multiselect=True)
+                    plora_ref_datasets_button = gr.Button("🔄", elem_classes='refresh_custom_list')
                 plora_train_button = gr.Button("开始训练", variant="primary")
                 with gr.Accordion("使用说明", open=False):
                     gr.Markdown("""训练详细说明..什么的""")
@@ -1467,19 +1499,30 @@ if __name__ == "__main__":
                     gr.Markdown("""《输入角色名然后你的模型就出现在c站了》\n
                                 需要在设置中设置c站token\n
                                 需要在计算机中添加环境变量: 键名 HF_TOKEN 值: 从登录的HuggingFace网站获取 在账号设置中创建访问令牌""")
-        toml_presets = ['默认', '一杯哈萨姆', '琥珀青葉']
+        toml_presets = ['默认', '一杯哈萨姆', '琥珀青葉', '自定义']
         with gr.Tab("LoRA训练"):
             with gr.Tab("快速训练"):
                 lora_epoch = gr.Slider(1, 100, label="Epoch", value=10)
                 lora_batch_size = gr.Slider(1, 64, label="Batch Size", value=1, step=1)
                 lora_toml_presets = gr.Radio(toml_presets, label="参数", info="通用化的参数预设", type="index", value="默认", interactive=True)
+                with gr.Column(visible=lora_toml_presets.value == 3, elem_classes="drop_custom_setting") as toml_custom_setting:
+                    toml_custom_dropdown = gr.Dropdown(ref_custom_toml(True), value=ref_custom_toml(True)[0], label="自定义参数", interactive=True, info="参数路径kohya/toml", filterable=False)
+                    ref_toml_button = gr.Button("🔄", elem_classes='refresh_custom_list')
+                lora_batch_train = gr.Checkbox(label="批量训练", value=False)
+                with gr.Column(visible=lora_batch_train.value, elem_classes="drop_custom_setting") as batch_lora_setting:
+                    lora_dataset_dropdown = gr.Dropdown(ref_datasets(True), label="多选数据集", value=ref_datasets(True)[0], container=True, show_label=True, interactive=True, multiselect=True)
+                    lora_ref_datasets_button = gr.Button("🔄", elem_classes='refresh_custom_list')
                 lora_train_button = gr.Button("开始训练", variant="primary")
+                lora_toml_presets.select(custom_toml_ctrl, lora_toml_presets, [toml_custom_setting])
             with gr.Tab("高级训练"):
                 with gr.Accordion("使用说明", open=False):
                     gr.Markdown("soon...")
             with gr.Tab("全自动训练") as tab_pipeline_lora:
                 pipeline_text_lora = gr.Textbox(label="角色名称", placeholder="《输入角色名然后你的模型就出现在c站了》", info="要求角色名 用,分隔")
                 pipeline_toml_presets = gr.Radio(toml_presets, label="参数", info="通用化的参数预设", type="index", value="默认")
+                with gr.Column(visible=lora_toml_presets.value == 3, elem_classes="drop_custom_setting") as toml_custom_setting:
+                    pipe_toml_custom_dropdown = gr.Dropdown(ref_custom_toml(True), value=ref_custom_toml(True)[0], label="自定义参数", interactive=True, info="参数路径kohya/toml", filterable=False)
+                    pipe_ref_toml_button = gr.Button("🔄", elem_classes='refresh_custom_list')
                 pipeline_button_lora = gr.Button("开始全自动训练", variant="primary")
                 with gr.Accordion("使用说明", open=False):
                     gr.Markdown("""《输入角色名然后你的模型就出现在c站了》\n
@@ -1543,6 +1586,8 @@ if __name__ == "__main__":
             save_output = gr.Button("💾", elem_id="save_output", interactive=False)
             message_output.change(save_output_ctrl, [], save_output)
         # dl_count.change(None, )
+        plora_batch_train.select(fast_batch_train_ctrl, None, [batch_plora_setting])
+        lora_batch_train.select(fast_batch_train_ctrl, None, [batch_lora_setting])
         mirror_pickup.click(mirror_process, [], [message_output])
         auto_crawl_1_button.click(auto_crawler, [auto_crawl_1_chars, auto_crawl_1_number], [])
         auto_crawl_2_button.click(auto_crawler, [auto_crawl_2_chars, auto_crawl_2_number], [])
@@ -1551,7 +1596,7 @@ if __name__ == "__main__":
         auto_crawl_2_status.click(auto_crawler_status, [auto_crawl_2_number], [])
         auto_crawl_3_status.click(auto_crawler_status, [auto_crawl_3_number], [])
         pipeline_button_plora.click(pipeline_start_plora, [pipeline_text_plora], [message_output])
-        pipeline_button_lora.click(pipeline_start_lora, [pipeline_text_lora, pipeline_toml_presets], [message_output])
+        pipeline_button_lora.click(pipeline_start_lora, [pipeline_text_lora, pipeline_toml_presets, pipe_toml_custom_dropdown], [message_output])
         setting_save_button.click(save_settings, [pixiv_token, fanbox_cookie, civitai_token, hf_token_box, proxie_ip, proxie_port, proxie_enabled, verify_enabled, theme_light, theme_style], [message_output])
         pixiv_manual_login.click(pixiv_login, [], [])
         pixiv_get_token.click(get_ref_token, [], [])
@@ -1562,10 +1607,14 @@ if __name__ == "__main__":
         download_button.click(download_images, [source, char_name, pre_min_size, pre_background, pre_class, pre_rating, pre_crop_person, pre_ccip_option, pre_auto_tagging, dl_count, pixiv_no_ai],
                               [message_output], scroll_to_output=True)
         ref_datasets_button.click(ref_datasets, [], [dataset_dropdown])
+        plora_ref_datasets_button.click(ref_datasets, [], [plora_dataset_dropdown])
+        lora_ref_datasets_button.click(ref_datasets, [], [lora_dataset_dropdown])
         ref_rep_button.click(ref_kohya_rep, [dataset_dropdown], [kohya_rep_dropdown])
         stage_button.click(three_stage, [dataset_dropdown, kohya_rep_dropdown], [message_output])
         stage_pickup.click(three_stage_pickup, [], [message_output])
-        drop_ref_button.click(ref_customList, [], [drop_custom_list])
+        drop_ref_button.click(ref_custom_blacklist, [], [drop_custom_blacklist])
+        ref_toml_button.click(ref_custom_toml, [], [toml_custom_dropdown])
+        pipe_ref_toml_button.click(ref_custom_toml, [], [pipe_toml_custom_dropdown])
         convert_ref_button.click(ref_runs, [dataset_dropdown], [convert_step])
         convert_weights_button.click(convert_weights, [dataset_dropdown, convert_step], [message_output])
         cluster_button.click(clustering, [dataset_dropdown, cluster_threshold, kohya_rep_dropdown], [message_output], scroll_to_output=True)
@@ -1574,15 +1623,15 @@ if __name__ == "__main__":
         faced_button.click(face_detect, [dataset_dropdown, faced_level, faced_model, faced_infer, faced_conf, faced_iou, kohya_rep_dropdown], [message_output], scroll_to_output=True)
         headd_button.click(head_detect, [dataset_dropdown, headd_level, headd_infer, headd_conf, headd_iou, kohya_rep_dropdown], [message_output], scroll_to_output=True)
         textd_button.click(text_detect, [dataset_dropdown, kohya_rep_dropdown], [message_output], scroll_to_output=True)
-        plora_train_button.click(run_train_plora, [dataset_dropdown, plora_min_step, plora_batch_size, plora_epoch], [message_output], scroll_to_output=True)
-        lora_train_button.click(run_train_lora, [dataset_dropdown, lora_epoch, lora_batch_size, lora_toml_presets], [message_output], scroll_to_output=True)
+        plora_train_button.click(run_train_plora, [dataset_dropdown, plora_min_step, plora_batch_size, plora_epoch, plora_batch_train, plora_dataset_dropdown], [message_output], scroll_to_output=True)
+        lora_train_button.click(run_train_lora, [dataset_dropdown, lora_epoch, lora_batch_size, lora_toml_presets, toml_custom_dropdown, lora_batch_train, lora_dataset_dropdown], [message_output], scroll_to_output=True)
         areaf_button.click(area_fill, [dataset_dropdown, areaf_isRandom, areaf_color, kohya_rep_dropdown], [message_output], scroll_to_output=True)
         areab_button.click(area_blur, [dataset_dropdown, areab_radius, kohya_rep_dropdown], [message_output], scroll_to_output=True)
         crop_hw_button.click(crop_hw, [dataset_dropdown, kohya_rep_dropdown], [message_output], scroll_to_output=True)
         crop_trans_button.click(crop_trans, [dataset_dropdown, crop_trans_thre, crop_trans_filter, kohya_rep_dropdown], [message_output], scroll_to_output=True)
         tagger_button.click(tagging_main,
                             [dataset_dropdown, tagger_type, wd14_tagger_model, wd14_general_threshold, wd14_character_threshold, wd14_format_weight, wd14_drop_overlap, ml_use_real_name, ml_threshold,
-                             ml_size, ml_format_weight, ml_keep_ratio, ml_drop_overlap, use_blacklist, drop_use_presets, drop_custom_list, op_exists_txt, anal_del_json, kohya_rep_dropdown], [message_output],
+                             ml_size, ml_format_weight, ml_keep_ratio, ml_drop_overlap, use_blacklist, drop_use_presets, drop_custom_blacklist, op_exists_txt, anal_del_json, kohya_rep_dropdown], [message_output],
                             scroll_to_output=True)
         illu_button.click(download_illust, [illu_name, illu_get_source, illu_max_size], [message_output], scroll_to_output=True)
         save_output.click(saving_output, [dataset_dropdown, kohya_rep_dropdown], [message_output])
