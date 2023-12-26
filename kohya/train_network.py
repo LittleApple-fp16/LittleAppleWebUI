@@ -46,7 +46,7 @@ from library.custom_train_functions import (
     apply_debiased_estimation,
 )
 
-
+_TOML_PRESET = ['kohya/toml/default_char.toml', 'kohya/toml/asamu.toml', 'kohya/toml/kohaku.toml']
 class NetworkTrainer:
     def __init__(self):
         self.vae_scale_factor = 0.18215
@@ -1003,21 +1003,27 @@ def setup_parser() -> argparse.ArgumentParser:
 
 def kohya_train_lora(v_train_data_dir, v_output_name, v_output_dir, v_epoch, v_bs, toml_index):
     parser = setup_parser()
+    import glob
+    from pathlib import Path
     # default_arg = "--config_file sd-scripts/toml/default_char.toml " \
     #               "--train_data_dir "+v_train_data_dir+" " \
     #               "--output_name "+v_output_name+" " \
     #               "--output_dir "+v_output_dir+" "
-    toml_files = ['kohya/toml/default_char.toml', 'kohya/toml/asamu.toml', 'kohya/toml/kohaku.toml']
-    args = parser.parse_args(['--config_file', toml_files[toml_index]])
+    toml_files = _TOML_PRESET
+    if isinstance(toml_index, int):
+        toml_file = toml_files[toml_index]
+    else:
+        toml_file = f'kohya/toml/{toml_index}'
+    args = parser.parse_args(['--config_file', toml_file])
     # args = argparse.Namespace()
-    args.config_file = toml_files[toml_index]
+    args.config_file = toml_file
     args.train_data_dir = v_train_data_dir
     args.output_name = v_output_name
     args.output_dir = v_output_dir
     args.max_train_epochs = v_epoch
     args.train_batch_size = v_bs
     args = train_util.read_config_from_file(args, parser)
-    args = parser.parse_args(['--config_file', toml_files[toml_index],
+    args = parser.parse_args(['--config_file', toml_file,
                              '--train_data_dir', v_train_data_dir,
                              '--output_name', v_output_name,
                              '--output_dir', v_output_dir], namespace=args)
