@@ -141,7 +141,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
 
 def dataset_getImg(dataset_name, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
-    logger.info(" - 加载数据集图像...")
+    logger.info("加载数据集图像...")
     if dataset_name.endswith(' (kohya)'):
         dataset_path = f'dataset/_kohya/{dataset_name.replace(" (kohya)", "")}/{rep_name}'
     else:
@@ -883,10 +883,12 @@ def saving_output(dataset_name, rep_name=None, progress=gr.Progress(track_tqdm=T
 def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_character_thre, wd14_weight, wd14_overlap, ml_real_name, ml_thre, ml_scale, ml_weight, ml_ratio, ml_overlap, need_black, drop_presets, drop_custom, exists_txt, del_json, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     # TODO performance optimization & kohya support
-    images = dataset_getImg(dataset_name, rep_name)[0]
-    img_name = dataset_getImg(dataset_name, rep_name)[1]
+    loaded_dataset = dataset_getImg(dataset_name, rep_name)
+    images = loaded_dataset[0]
+    img_name = loaded_dataset[1]
     if ttype == taggers[0]:
         gr.Info("数据打标开始处理 打标器: wd14")
+        logging.info("数据打标正在处理...")
         for img, name in tzip(images, img_name, file=sys.stdout, desc="执行数据打标 [wd14]"):
             result = get_wd14_tags(img, wd14_tagger, wd14_general_thre, wd14_character_thre, wd14_overlap)
             if result[2]:
@@ -915,9 +917,10 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
                     with open(f'dataset/{dataset_name}/{name}.txt', 'w') as tag:
                         tag.write(result)
         gr.Info("数据打标已结束")
+        logger.success("数据打标完成")
     elif ttype == taggers[1]:
         gr.Info("数据打标开始处理 打标器: mldanbooru")
-        # print(" - 数据打标开始处理")
+        logging.info("数据打标正在处理...")
         for img, name in tzip(images, img_name, file=sys.stdout, desc="执行数据打标 [mldanbooru]"):
             result = get_mldanbooru_tags(img, ml_real_name, ml_thre, ml_scale, ml_ratio, ml_overlap)
             result = tags_to_text(result, include_score=ml_weight)
@@ -943,51 +946,71 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
                     with open(f'dataset/{dataset_name}/{name}.txt', 'w') as tag:
                         tag.write(result)
         gr.Info("数据打标已结束")
+        logger.success("数据打标完成")
     elif ttype == taggers[2]:
         gr.Info("标签解析开始处理")
-        json_files = glob.glob(f'dataset/{dataset_name}/*.json')
+        logging.info("数据打标 - 标签解析正在处理...")
+        json_files = glob.glob(f'dataset/{dataset_name}/.*.json')
         for json_file in tqdm(json_files, file=sys.stdout, desc="执行标签解析"):
-            with open(json_file, 'r') as f:
+            with open(json_file, 'r', encoding='utf-8') as f:
                 jdata = json.load(f)
-            danbooru_data = jdata.get('danbooru', {})
-            tag_json_general = danbooru_data.get('tag_string_general', '')
-            tag_json_character = danbooru_data.get('tag_string_character, ')
-            if tag_json_general:
-                tag_json_general = tag_json_general.replace(' ', ', ')
-            if tag_json_character:
-                tag_json_character = tag_json_character.replace(' ', ', ')
-            if tag_json_general is None and tag_json_character is None:
+            source_data = jdata.get('danbooru', jdata.get('yande', jdata.get('rule34', jdata.get('anime_pictures', jdata.get('zerochan', jdata.get('lolibooru', {}))))))
+            tags = source_data.get('tags', '')
+            tag_string = source_data.get('tag_string', '')
+            tag_string_general = source_data.get('tag_string_general', '')
+            tag_string_character = source_data.get('tag_string_character, ', '')
+            if tag_string:
+                tag_string = tag_string.replace(' ', ', ')
+            if tag_string_general:
+                tag_string_general = tag_string_general.replace(' ', ', ')
+            if tag_string_character:
+                tag_string_character = tag_string_character.replace(' ', ', ')
+            if tags:
+                if isinstance(tags, dict):
+                    tags = ', '.join(tags.keys())
+                elif isinstance(tags, list):
+                    tags = ', '.join(str(tag) for tag in tags)
+                elif isinstance(tags, str):
+                    tags.replace(' ', ', ')
+                else:
+                    logger.error("标签解析失败 你发现了新的大陆")
+                    return get_output_status(output_cache)+"标签解析失败 你发现了新的大陆"
+            if tag_string_general is None and tag_string_character is None and tags is None and tag_string is None:
                 gr.Warning("标签解析: 数据集内无json标签")
-                return get_output_status(output_cache)+"标签解析失败"
-            elif tag_json_general is None:
-                tag_json = tag_json_character
-            elif tag_json_character is None:
-                tag_json = tag_json_general
+                logger.error("标签解析失败 数据集内无json标签")
+                return get_output_status(output_cache)+"标签解析失败 数据集内无json标签"
+            if tags:
+                tag_json = tags
             else:
-                tag_json = f"{tag_json_general}\n{tag_json_character}\n"
+                tag_json = tag_string
+                if tag_string is None:
+                    if tag_string_general is None and tag_string_character:
+                        tag_json = tag_string_character
+                    else:
+                        tag_json = tag_string_general
             if need_black:
                 tag_json = str(str(drop_blacklisted_tags([tag_json], drop_presets, drop_custom))[2:-2])
             txtfile_name = json_file.replace('.', '', 1).replace('_meta.json', '.txt')
-            if tag_json_general or tag_json_character:
-                if os.path.isfile(f'{txtfile_name}'):
-                    if exists_txt == "复制文件":
-                        os.rename(f'{txtfile_name}', f'{txtfile_name}'.replace('.txt', '_backup.txt'))
-                        with open(f'{txtfile_name}', 'w') as f:
-                            f.write(tag_json)
-                    elif exists_txt == "忽略文件":
-                        pass
-                    elif exists_txt == "附加标签":
-                        with open(f'{txtfile_name}', 'a+') as f:
-                            f.write(tag_json)
-                    elif exists_txt == "覆盖文件":
-                        with open(f'{txtfile_name}', 'w') as f:
-                            f.write(tag_json)
-                else:
-                    with open(f'{txtfile_name}', 'w') as f:
+            if os.path.isfile(f'{txtfile_name}'):
+                if exists_txt == "复制文件":
+                    os.rename(f'{txtfile_name}', f'{txtfile_name}'.replace('.txt', '_backup.txt'))
+                    with open(f'{txtfile_name}', 'w', encoding='utf-8') as f:
                         f.write(tag_json)
-                if del_json:
-                    os.remove(json_file)
+                elif exists_txt == "忽略文件":
+                    pass
+                elif exists_txt == "附加标签":
+                    with open(f'{txtfile_name}', 'a+', encoding='utf-8') as f:
+                        f.write(tag_json)
+                elif exists_txt == "覆盖文件":
+                    with open(f'{txtfile_name}', 'w', encoding='utf-8') as f:
+                        f.write(tag_json)
+            else:
+                with open(f'{txtfile_name}', 'w', encoding='utf-8') as f:
+                    f.write(tag_json)
+            if del_json:
+                os.remove(json_file)
         gr.Info("标签解析已结束")
+        logger.success("数据打标 - 标签解析完成")
 
 
 # @gr.StateHandler
