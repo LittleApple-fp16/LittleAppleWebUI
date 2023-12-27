@@ -955,7 +955,7 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
             with open(json_file, 'r', encoding='utf-8') as f:
                 jdata = json.load(f)
             source_data = jdata.get('danbooru', jdata.get('yande', jdata.get('rule34', jdata.get('anime_pictures', jdata.get('zerochan', jdata.get('lolibooru', {}))))))
-            tags = source_data.get('tags', '')
+            tags = source_data.get('tags', jdata.get('tags', ''))
             tag_string = source_data.get('tag_string', '')
             tag_string_general = source_data.get('tag_string_general', '')
             tag_string_character = source_data.get('tag_string_character, ', '')
@@ -971,7 +971,7 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
                 elif isinstance(tags, list):
                     tags = ', '.join(str(tag) for tag in tags)
                 elif isinstance(tags, str):
-                    tags.replace(' ', ', ')
+                    tags = tags.replace(' ', ', ')
                 else:
                     logger.error("标签解析失败 你发现了新的大陆")
                     return get_output_status(output_cache)+"标签解析失败 你发现了新的大陆"
@@ -1300,8 +1300,8 @@ if __name__ == "__main__":
     with gr.Blocks(css=load_css(), analytics_enabled=False) as iblock:
         quicksettings = gr.Row(elem_id="quicksettings")
         with quicksettings:
-            dataset_dropdown = gr.Dropdown(ref_datasets(True), label="当前数据集", value=ref_datasets(True)[0], container=True, show_label=True, interactive=True, elem_classes='dataset_dropbar', elem_id='quick_dataset')
-            ref_datasets_button = gr.Button("🔄", elem_classes='refresh_datasets')
+            dataset_dropdown = gr.Dropdown(ref_datasets(True), label="当前数据集", value=ref_datasets(True)[0], container=True, show_label=True, interactive=True, elem_id='dataset_dropbar')
+            ref_datasets_button = gr.Button("🔄", elem_id='refresh_datasets')
             reps = ref_kohya_rep(dataset_dropdown.value, True)
             kohya_rep_dropdown = gr.Dropdown(reps, label="当前循环", value=reps[0] if reps else [], visible=False, elem_id='rep_dropbar', interactive=True, filterable=False)
             ref_rep_button = gr.Button("🔄", elem_id='refresh_reps', visible=False, interactive=True)

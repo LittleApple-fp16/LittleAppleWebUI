@@ -1,4 +1,4 @@
-.refresh_datasets {
+#refresh_datasets {
     max-width: 2.2em;
     min-width: 2.2em !important;
     height: 2.4em;
@@ -22,7 +22,7 @@
     top: 1.9em;
 }
 
-.dataset_dropbar {
+#dataset_dropbar {
     max-width: 36em;
     background: none;
 }
@@ -62,7 +62,7 @@
 #drop_custom_setting>div {
     /*background-color: transparent !important;*/
 }
-#quick_dataset>label>span {
+#dataset_dropbar>label>span {
     margin-bottom: 0;
 }
 

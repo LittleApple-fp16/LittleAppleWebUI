@@ -3,7 +3,7 @@
     min-width: 2.2em !important;
     height: 2.4em;
     position: relative;
-    top: 2.2em !important;
+    top: 2.15em !important;
 	padding: 0px calc(2 * var(--spacing-lg));
 }
 
@@ -12,7 +12,7 @@
     min-width: 2.2em !important;
     height: 2.4em;
     position: relative;
-    top: 2.2em !important;
+    top: 2.15em !important;
 	padding: 0px calc(2 * var(--spacing-lg));
 }
 
