@@ -304,8 +304,8 @@ async def illu_getter(pic, progress=gr.Progress(track_tqdm=True)):
             return "未找到", ""
         else:
             output_cache = []
-            gr.Info(f"画师 + {selected.author}的作品 {selected.title}")
-            logger.success(f"画师 + {selected.author}的作品 {selected.title}")
+            gr.Info(f"画师 {selected.author}的作品: {selected.title}")
+            logger.success(f"画师 {selected.author}的作品: {selected.title}")
             return selected.author + " (" + selected.author_url + ") " + "的作品:" + selected.title, selected.author  # re.search(r'\d+$', selected.author_url).group()
 
 

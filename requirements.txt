@@ -35,7 +35,7 @@ dateparser==1.1.8
 decorator==5.1.1
 Deprecated==1.2.14
 deprecation==2.1.0
-dghs-imgutils==0.3.2
+dghs-imgutils>=0.3.2
 DI-toolkit==0.2.0
 diffusers==0.21.4
 distlib==0.3.7
