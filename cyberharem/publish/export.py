@@ -328,7 +328,10 @@ def export_workdir(workdir: str, export_dir: str, n_repeats: int = 2,
             else:
                 epochs.sort()
                 # 最大epoch加增量
-                epoch = epochs[-1] + max(set([j - i for i, j in zip(epochs[:-1], epochs[1:])]), key=[j - i for i, j in zip(epochs[:-1], epochs[1:])].count)
+                if len(epochs) >= 2:
+                    epoch = epochs[-1] + max(set([j - i for i, j in zip(epochs[:-1], epochs[1:])]), key=[j - i for i, j in zip(epochs[:-1], epochs[1:])].count)
+                else:
+                    epoch = "1"
                 epoch = str(epoch).zfill(6)
                 epochs.append(int(epoch))
             epoch_dir = os.path.join(export_dir, f'{epoch}')

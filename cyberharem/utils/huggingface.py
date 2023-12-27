@@ -36,5 +36,8 @@ def get_hf_client() -> HfApi:
     return HfApi(token=os.environ.get('HF_TOKEN'))
 
 
-def get_hf_fs() -> HfFileSystem:
-    return HfFileSystem(token=os.environ.get('HF_TOKEN'))
+def get_hf_fs(no_token=False) -> HfFileSystem:
+    if no_token:
+        return HfFileSystem()
+    else:
+        return HfFileSystem(token=os.environ.get('HF_TOKEN'))

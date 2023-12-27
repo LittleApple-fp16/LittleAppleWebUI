@@ -34,6 +34,7 @@ try:
     from pixivpy3 import AppPixivAPI, PixivError
     from tqdm import tqdm
     from tqdm.contrib import tzip
+    from gchar.games.dispatch.access import GAME_CHARS
     from waifuc.action import HeadCountAction, AlignMinSizeAction, CCIPAction, ThreeStageSplitAction, ModeConvertAction, ClassFilterAction, PersonSplitAction, TaggingAction, RatingFilterAction, NoMonochromeAction, RandomFilenameAction, FirstNSelectAction, FilterSimilarAction, FileExtAction
     from waifuc.export import SaveExporter, TextualInversionExporter
     from waifuc.source import GelbooruSource, PixivSearchSource, ZerochanSource, LocalSource, GcharAutoSource
@@ -46,7 +47,7 @@ try:
     from cyberharem.utils import download_file as cyber_download_file
     from cyberharem.publish.civitai import civitai_publish_from_hf
     from cyberharem.publish.huggingface import deploy_to_huggingface
-    from huggingface_hub import hf_hub_url
+    from huggingface_hub import hf_hub_url, hf_hub_download
     from huggingface_hub._login import login as hf_login
     from cyberharem.infer.draw import _DEFAULT_INFER_MODEL
     from kohya.train_network import kohya_train_lora
@@ -711,7 +712,7 @@ def ref_runs(dataset_name, need_list=False):
 def run_train_lora(dataset_name, epoch, bs, toml_index, custom_toml_name=None, is_pipeline=False, is_batch=False, batch_name=None, progress=gr.Progress(track_tqdm=True)):
     import tempfile
     import toml
-    logger.info("LoRA开始训练")
+    logger.info(f"[{dataset_name}] LoRA开始训练")
     gr.Info(f"[{dataset_name}] LoRA开始训练")
     with tempfile.NamedTemporaryFile(suffix=".toml", delete=False) as tt:
         if toml_index == 3:
@@ -1120,33 +1121,57 @@ def pipeline_start(ch_names, train_type, toml_index=None, toml_name=None, progre
     epoc = 10
     is_kohya = bool(train_type)
     riyu = kakasi()
-    actions = [NoMonochromeAction(), CCIPAction(), PersonSplitAction(),  # ccip角色聚类
+    actions = [NoMonochromeAction(), CCIPAction(), PersonSplitAction(),  # ccip here
                HeadCountAction(1), TaggingAction(force=True),
                FilterSimilarAction('all'), ModeConvertAction('RGB'),  # FilterSimilar: lpips差分过滤
-               FileExtAction(ext='.png'),  # png格式质量无损
+               FileExtAction(ext='.png'),  # png format
                FirstNSelectAction(1000)]  # 700+
     ch_list = ch_names.split(',')
     for ch in ch_list:
+        logging.info("Ready...")
+        time.sleep(10)
+        with TemporaryDirectory() as td:
+            logging.info("Searching..")
+            hf_fs = cyber_get_hf_fs()
+            _ch_json = [file for file in hf_fs.glob(f'datasets/deepghs/game_characters/*/index.json')]
+            for game in _ch_json:
+                names = {}
+                json_file = hf_hub_download(repo_id='deepghs/game_characters', repo_type='dataset', filename=os.path.join(os.path.basename(os.path.dirname(game)), 'index.json'),
+                                            token=os.environ['HF_TOKEN'])
+                with open(json_file, 'r', encoding='utf-8') as f:
+                    json_p = json.load(f)
+                    char_datas = json_p['data']
+                    for char_data in char_datas:
+                        name_keys = ['cnnames', 'ennames', 'jpnames']
+                        if any(ch in char_data.get(key, '') for key in name_keys):
+                            for key in name_keys:
+                                names[key[:-1]] = char_data.get(key, '')[0] if char_data.get(key, '') else ''
+                            logger.success("Loaded as " + " / ".join(names.values()))
+                            break
+                if len(names):
+                    break
+            if not len(names):
+                logger.warning(f"No preset name found for {ch}.")
         gr.Info(f"[{ch}]"+" 全自动训练开始")
         ch = ch.replace(' ', '_')
-        ch_e = ''.join([r['hepburn']for r in riyu.convert(re.sub(r'[^\w\s()]', '', ''.join([word if not (u'\u4e00' <= word <= u'\u9fff') else lazy_pinyin(ch)[i] for i, word in enumerate(ch)])))]).replace(' ', '_')
+        ch_letter = ''.join([r['hepburn']for r in riyu.convert(re.sub(r'[^\w\s()]', '', ''.join([word if not (u'\u4e00' <= word <= u'\u9fff') else lazy_pinyin(ch)[i] for i, word in enumerate(ch)])))]).replace(' ', '_')
         if not is_kohya:
-            save_path = f"pipeline\\dataset\\{ch_e}"
+            save_path = f"pipeline\\dataset\\{ch_letter}"
         else:
-            save_path = f"pipeline\\dataset\\_kohya\\{ch_e}\\1_{ch_e}"
+            save_path = f"pipeline\\dataset\\_kohya\\{ch_letter}\\1_{ch_letter}"
         progress(0.25, desc="[全自动训练] 数据集获取")
 ###
         source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
         source_init.attach(*actions).export(
             TextualInversionExporter(save_path)
         )
-        time.sleep(16)
+        time.sleep(5)
 ###
         progress(0.5, desc=f"[全自动训练] {'LoRA' if is_kohya else 'PLoRA'}训练")
         if not is_kohya:
-            run_train_plora(ch_e, bs=bs, epoc=epoc, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
+            run_train_plora(ch_letter, bs=bs, epoc=epoc, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
         else:
-            run_train_lora(ch_e, bs=bs, epoch=epoc, toml_index=toml_index, custom_toml_name=toml_name, is_pipeline=True)
+            run_train_lora(ch_letter, bs=bs, epoch=epoc, toml_index=toml_index, custom_toml_name=toml_name, is_pipeline=True)
 ###
 
         def huggingface(workdir: str, repository, revision, n_repeats, pretrained_model,
@@ -1218,30 +1243,21 @@ def pipeline_start(ch_names, train_type, toml_index=None, toml_name=None, progre
                 logging.info(f'Draft created, it can be seed at {url} .')
 
         progress(0.75, desc="[全自动训练] 上传抱抱脸")
-        time.sleep(16)
-        huggingface(workdir='pipeline/runs/' + ('_kohya/' if is_kohya else '') + ch_e, repository=None, n_repeats=3, pretrained_model=_DEFAULT_INFER_MODEL, width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
+        time.sleep(5)
+        huggingface(workdir='pipeline/runs/' + ('_kohya/' if is_kohya else '') + ch_letter, repository=None, n_repeats=3, pretrained_model=_DEFAULT_INFER_MODEL, width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
         # if not is_kohya:
         #     try:
-        #         rehf(repository=f'AppleHarem/{ch_e}', n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
+        #         rehf(repository=f'AppleHarem/{ch_letter}', n_repeats=3, pretrained_model='_DEFAULT_INFER_MODEL', width=512, height=768, clip_skip=2, infer_steps=30, revision='main')
         #     except Exception as e:
         #         logger.error(" - 错误:", e)
         #         raise e
-        progress(1, desc="[全自动训练] 上传Civitai")
-        time.sleep(16)
-        hf_fs = cyber_get_hf_fs()
-        for i in range(200):
-            if hf_fs.exists(f'AppleHarem/{ch_e}/meta.json'):
-                civitai(repository=f'AppleHarem/{ch_e}', draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=None, epochs=epoc, publish_time=None, steps=None, title=f'{ch}/{ch_e}', version_name=None, is_pipeline=True, is_kohya=is_kohya, verify=cfg.get('verify_enabled', True))
-            else:
-                logging.warning(f"AppleHarem/{ch_e}/meta.json not found, retrying in 20 seconds...")
-                time.sleep(20)
-        if not hf_fs.exists(f'AppleHarem/{ch_e}/meta.json'):
-            logging.error("The meta json not found.")
-            raise FileNotFoundError
+        time.sleep(5)
+        civitai(repository=f'AppleHarem/{ch_letter}', draft=False, allow_nsfw=True, force_create=False, no_ccip_check=False, session=None, epochs=epoc, publish_time=None, steps=None, title=f"{'/'.join(names.values())}" or f'{ch}/{ch_letter}', version_name=None, is_pipeline=True, is_kohya=is_kohya, verify=cfg.get('verify_enabled', True))
+        time.sleep(5)
         gr.Info(f"[{ch}]" + " 全自动训练完成")
-        logger.success(" - 完成: 已完成"+ch+"角色上传")
-        time.sleep(16)
+        logger.success("完成: 已完成"+ch+"角色上传")
     gr.Info("所有全自动训练任务完成")
+    logger.success("所有全自动训练任务完成")
     return get_output_status(output_cache)+"所有任务完成"
 
 

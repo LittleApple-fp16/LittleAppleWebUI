@@ -566,7 +566,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
         repo = source
     else:
         raise TypeError(f'Unknown source type - {source!r}.')
-    hf_fs = get_hf_fs()
+    hf_fs = get_hf_fs(no_token=True)
     try:
         meta_json = json.loads(hf_fs.read_text(f'{repo}/meta.json'))
     except json.JSONDecodeError as e:
@@ -574,6 +574,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
         logging.error('Metadata loading failed.')
         raise e
     game_name = "" if source.split("AppleHarem/")[1].split('_')[-1] == source.split("AppleHarem/")[1] else source.split("AppleHarem/")[1].split('_')[-1]
+    ch_name = source.split("AppleHarem/")[1].split('_')[0]
     if session:
         session_req = get_requests_session(max_retries=5, timeout=30, verify=verify, headers=None, session=None)
         session_req.cookies.update(json.loads(session))
@@ -583,7 +584,6 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
     dataset_info = meta_json.get('dataset')
     ds_size = (384, 512) if not dataset_info or not dataset_info['type'] else dataset_info['type']
     try:
-        ch_name = source.split("AppleHarem/")[1]
         if is_pipeline:
             dataset_local_dir = f'pipeline/dataset/{f"{ch_name}" if not is_kohya else "_kohya/" + f"{ch_name}/1_{ch_name}/"}'
         else:
@@ -669,7 +669,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
             lora_file = os.path.basename(hf_fs.glob(f'{repo}/{step}/*.safetensors')[0])
             pt_file = os.path.basename(hf_fs.glob(f'{repo}/{step}/*.pt')[0])
             trigger_word = os.path.splitext(lora_file)[0]
-            char_name = ' '.join(trigger_word.split('_')[:-1]) or trigger_word
+            char_name = ch_name or trigger_word
 
             models = []
             local_lora_file = os.path.join(models_dir, lora_file)
@@ -883,7 +883,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
             5. Individuals who finds the generated image content offensive to their values.
             6. Individuals who feel that writing a WebUI is meaningless or impatient.
             """
-            model_name = try_find_title(char_name, game_name) or model_name or \
+            model_name = model_name or try_find_title(char_name, game_name) or \
                          try_get_title_from_repo(repo) or trigger_word.replace('_', ' ') or get_ch_name(source)
             # if not force_create_model:
             #     try:
@@ -1086,7 +1086,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
             recommended_tags = sorted([ptag for ptag, cnt in tags_count.items() if cnt == max_tag_cnt],
                                       key=lambda x: tags_idx[x])
             trigger_word = ch_name
-            char_name = ' '.join(trigger_word.split('_')[:-1])
+            char_name = ch_name or trigger_word
 
             # publish model
             param_author = {
@@ -1154,10 +1154,10 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                         5. Individuals who finds the generated image content offensive to their values.
                         6. Individuals who feel that writing a WebUI is meaningless or impatient.
                         """
-            model_name = try_find_title(char_name, game_name) or model_name or \
+            model_name = model_name or try_find_title(char_name, game_name) or \
                          try_get_title_from_repo(repo) or trigger_word.replace('_', ' ')
             model_id = None
-            char_name = ch_name
+            char_name = ch_name or trigger_word
             if game_name:
                 tags = [
                            f"{game_name} {char_name}", char_name,
@@ -1167,7 +1167,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
             else:
                 tags = [
                            char_name,
-                           'female', 'girl', 'character', 'anime',
+                           'game', 'illustration', 'character',
                            *map(_tag_decode, core_tags.keys()),
                        ]
             model_id, _ = civitai_upsert_model(
@@ -1203,7 +1203,7 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
                 image_files=images,
                 tags=[
                     f"{game_name} {char_name}", char_name,
-                    'female', 'girl', 'character', 'fully-automated', 'random prompt', 'random seed',
+                    'character', 'fully-automated',
                     *map(_tag_decode, core_tags.keys()),
                 ],
                 model_id=model_id,
@@ -1215,8 +1215,6 @@ def civitai_publish_from_hf(source, model_name: str = None, model_desc_md: str =
             else:
                 civiti_publish(model_id, version_id, publish_at, session_req)
         return civitai_get_model_info(model_id, session_req)['id']
-
-
 
 
 def get_draft_models(session=None):

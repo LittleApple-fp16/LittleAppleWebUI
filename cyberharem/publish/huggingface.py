@@ -129,3 +129,4 @@ def deploy_to_huggingface(workdir: str, o_repository=None, revision: str = 'main
             repo_type='model',
             revision=revision,
         )
+    logging.info('Publish finished.')

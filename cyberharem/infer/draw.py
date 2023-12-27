@@ -320,7 +320,7 @@ def draw_with_workdir_kohya(workdir: str, lora_path: str, pretrained_model: str 
                         'clip_skip': clip_skip,
                         'sampler': 'euler',
                         'textual_inversion_embeddings': [neg_emb_path_1, neg_emb_path_2],
-                        'vae': _VAE_MSE
+                        'vae': _VAE_CLEAR
                     }
                     cfgs = OmegaConf.merge(OmegaConf.load(kohya_cfg_file), args)
                     # args = data_to_cli_args(args)
