@@ -79,7 +79,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
     # ratings_to_filter = set(rating_map.values()) - set([rating_map[i] for i in p_rating if i in rating_map])
     ratings_to_filter = set([rating_map[i] for i in p_rating if i in rating_map])
     gr.Info("开始获取数据集")
-    logger.info("\n - 开始获取数据集")
+    logger.info("开始获取数据集")
     character_list = character_name.split(',')
     for character in character_list:
         character = character.replace(' ', '_')  # 将空格替换为下划线
@@ -142,7 +142,7 @@ def download_images(source_type, character_name, p_min_size, p_background, p_cla
 
 def dataset_getImg(dataset_name, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
-    logger.info("加载数据集图像...")
+    logging.info("加载数据集图像...")
     if dataset_name.endswith(' (kohya)'):
         dataset_path = f'dataset/_kohya/{dataset_name.replace(" (kohya)", "")}/{rep_name}'
     else:
@@ -180,7 +180,7 @@ def download_illust(i_name, i_source, i_maxsize=None, progress=gr.Progress(track
                 'http': 'http://' + cfg.get('proxie_ip', None) + ':' + cfg.get('proxie_port', None)
             }
         if 0 in i_source:
-            logger.info("[信息] - 画师内容获取需要一段时间")
+            logger.info("画师内容获取需要一段时间")
             links = get_image_links(illust['user']['id'], maxsize)
             for url, name in tzip(links[0], links[1], file=sys.stdout, desc="获取画师数据集"):
                 if not os.path.exists(f"dataset/{illust['user']['name']}"):
@@ -196,7 +196,7 @@ def download_illust(i_name, i_source, i_maxsize=None, progress=gr.Progress(track
         return "下载已结束"
     except Exception as exp:
         gr.Warning("数据集获取失败, 请查看控制台")
-        logger.error(f"[错误] - 获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须设置Kemono令牌才能获取Fanbox的内容\n你必须输入正确的画师名, 错误信息:{exp}")
+        logger.error(f"获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须设置Kemono令牌才能获取Fanbox的内容\n你必须输入正确的画师名\n错误信息:{exp}")
         output_cache = []
         return "获取失败\n你必须设置Pixiv访问令牌才能获取Pixiv的内容\n你必须设置Kemono令牌才能获取Fanbox的内容\n你必须输入正确的画师名"
 
@@ -252,7 +252,7 @@ def has_image(got_list):
 def has_area(got_list):
     if not got_list:
         return False
-    if isinstance(got_list, list) and all(
+    if isinstance(got_list, list) and any(
         isinstance(item, list) and len(item) == 1 and
         isinstance(item[0], tuple) and len(item[0]) == 3 and
         isinstance(item[0][0], tuple) and len(item[0][0]) == 4 and
@@ -290,7 +290,7 @@ async def illu_getter(pic, progress=gr.Progress(track_tqdm=True)):
             client=client
         )
         progress(0.6, desc="搜索作品信息")
-        logging.info("搜索画师作品...")
+        logger.info("搜索画师作品...")
         resp = await ascii2d.search(file=pic)
         selected = None
         for i in tqdm(resp.raw, desc="筛选作品信息"):
@@ -314,11 +314,11 @@ def clustering(dataset_name, thre, rep_name=None, progress=gr.Progress(track_tqd
     if has_image(output_cache):
         images = output_cache
         gr.Info("差分过滤开始处理 <- 缓存")
-        logging.info("从缓存结果执行差分过滤...")
+        logger.info("从缓存结果执行差分过滤...")
     else:
         images = dataset_getImg(dataset_name, rep_name)[0]
         gr.Info("差分过滤开始处理 <- 数据集")
-        logging.info("从数据集执行差分过滤...")
+        logger.info("从数据集执行差分过滤...")
     # print(clusters)
     clustered_imgs = []
     added_clusters = set()  # 创建一个集合 其中存储已经添加过的标签 此集合将约束被过滤的img列表 集合中的元素无法dup
@@ -405,7 +405,7 @@ def mirror_process(progress=gr.Progress(track_tqdm=True)):
         else:
             break
     gr.Info("快速镜像开始处理")
-    logging.info("快速镜像开始处理")
+    logger.info("快速镜像开始处理")
     for i_pth in pths:
         output_folder = i_pth + '_mirror'
         os.makedirs(output_folder, exist_ok=False)
@@ -450,11 +450,11 @@ def face_detect(dataset_name, level, version, max_infer_size, conf_threshold, io
     if has_image(output_cache):
         images = output_cache
         gr.Info("面部检测开始处理 <- 缓存")
-        logging.info("从缓存结果执行面部检测...")
+        logger.info("从缓存结果执行面部检测...")
     else:
         images = dataset_getImg(dataset_name, rep_name)[0]
         gr.Info("面部检测开始处理 <- 数据集")
-        logging.info("从数据集执行面部检测...")
+        logger.info("从数据集执行面部检测...")
     detected = []
     if level:
         level = "s"
@@ -475,11 +475,11 @@ def head_detect(dataset_name, level, max_infer_size, conf_threshold, iou_thresho
     if has_image(output_cache):
         images = output_cache
         gr.Info("头部检测开始处理 <- 缓存")
-        logging.info("从缓存结果执行头部检测...")
+        logger.info("从缓存结果执行头部检测...")
     else:
         images = dataset_getImg(dataset_name, rep_name)[0]
         gr.Info("头部检测开始处理 <- 数据集")
-        logging.info("从数据集执行头部检测...")
+        logger.info("从数据集执行头部检测...")
     detected = []
     if level:
         level = "s"
@@ -500,11 +500,11 @@ def text_detect(dataset_name, rep_name=None, progress=gr.Progress(track_tqdm=Tru
     if has_image(output_cache):
         images = output_cache
         gr.Info("文本检测开始处理 <- 缓存")
-        logging.info("从缓存结果执行文本检测...")
+        logger.info("从缓存结果执行文本检测...")
     else:
         images = dataset_getImg(dataset_name, rep_name)[0]
         gr.Info("文本检测开始处理 <- 数据集")
-        logging.info("从数据集执行文本检测...")
+        logger.info("从数据集执行文本检测...")
     detected = []
     for img in tqdm(images, file=sys.stdout, desc="执行文本检测"):
         detected.append(detect_text_with_ocr(img))
@@ -752,7 +752,7 @@ def convert_weights(dataset_name, step, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     gr.Info("开始LoRA转换")
     progress(0, desc="执行LoRA转换")
-    # logging.try_init_root(logging.INFO)
+    # logging.try_init_root(logger.info)
     convert_to_webui_lora(f"runs/{dataset_name}/ckpts/unet-{step}.safetensors",
                           f"runs/{dataset_name}/ckpts/text_encoder-{step}.safetensors",
                           os.path.join(f"runs/{dataset_name}/ckpts", f"{dataset_name}-lora-{step}.safetensors")
@@ -889,7 +889,7 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
     img_name = loaded_dataset[1]
     if ttype == taggers[0]:
         gr.Info("数据打标开始处理 打标器: wd14")
-        logging.info("数据打标正在处理...")
+        logger.info("数据打标正在处理...")
         for img, name in tzip(images, img_name, file=sys.stdout, desc="执行数据打标 [wd14]"):
             result = get_wd14_tags(img, wd14_tagger, wd14_general_thre, wd14_character_thre, wd14_overlap)
             if result[2]:
@@ -921,7 +921,7 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
         logger.success("数据打标完成")
     elif ttype == taggers[1]:
         gr.Info("数据打标开始处理 打标器: mldanbooru")
-        logging.info("数据打标正在处理...")
+        logger.info("数据打标正在处理...")
         for img, name in tzip(images, img_name, file=sys.stdout, desc="执行数据打标 [mldanbooru]"):
             result = get_mldanbooru_tags(img, ml_real_name, ml_thre, ml_scale, ml_ratio, ml_overlap)
             result = tags_to_text(result, include_score=ml_weight)
@@ -950,7 +950,7 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
         logger.success("数据打标完成")
     elif ttype == taggers[2]:
         gr.Info("标签解析开始处理")
-        logging.info("数据打标 - 标签解析正在处理...")
+        logger.info("数据打标 - 标签解析正在处理...")
         json_files = glob.glob(f'dataset/{dataset_name}/.*.json')
         for json_file in tqdm(json_files, file=sys.stdout, desc="执行标签解析"):
             with open(json_file, 'r', encoding='utf-8') as f:
@@ -1093,17 +1093,17 @@ def pixiv_login():
         try:
             pyapi.auth(refresh_token=cfg.get('pixiv_token', ''))
             gr.Info("Pixiv已登录")
-            logger.success("[信息] - Pixiv登录成功")
+            logger.success("Pixiv登录成功")
             break
         except PixivError:
             time.sleep(10)
         if not cfg.get('pixiv_token', ''):
             gr.Warning("Pixiv登录失败，因为没有设置访问令牌")
-            logger.warning("[警告] - Pixiv登录失败，因为没有设置访问令牌")
+            logger.warning("Pixiv登录失败，因为没有设置访问令牌")
             break
     else:
         gr.Warning("Pixiv登录失败")
-        logger.warning("[警告] - Pixiv登录失败，已尝试三次，请前往设置检查刷新令牌，并尝试重新登录")
+        logger.warning("Pixiv登录失败，已尝试三次，请前往设置检查刷新令牌，并尝试重新登录")
 
 
 def pipeline_start_plora(ch_names):
@@ -1187,7 +1187,7 @@ def pipeline_start(ch_names, train_type, toml_index=None, toml_name=None, progre
             from pathlib import Path
             logging.try_init_root(logging.INFO)
             with TemporaryDirectory() as workdir:
-                logging.info(f'正在下载{workdir!r}模型...')
+                logger.info(f'正在下载{workdir!r}模型...')
                 hf_fs = cyber_get_hf_fs()
                 for f in tqdm(hf_fs.glob(f'{repository}/*/raw/*')):
                     rel_file = Path(os.path.relpath(f, repository)).as_posix()
@@ -1199,7 +1199,7 @@ def pipeline_start(ch_names, train_type, toml_index=None, toml_name=None, progre
                         local_file
                     )
 
-                logging.info(f'正在为{workdir!r}重新生成标签...')
+                logger.info(f'正在为{workdir!r}重新生成标签...')
                 pt_name, _ = find_steps_in_workdir(workdir)
                 game_name = pt_name.split('_')[-1]
                 name = '_'.join(pt_name.split('_')[:-1])
@@ -1216,9 +1216,9 @@ def pipeline_start(ch_names, train_type, toml_index=None, toml_name=None, progre
                 else:
                     source = ch
 
-                logging.info(f'Regenerate tags for {source!r}, on {workdir!r}.')
+                logger.info(f'Regenerate tags for {source!r}, on {workdir!r}.')
                 save_recommended_tags(source, name=pt_name, workdir=workdir)
-                logging.info('Success!')
+                logger.success('标签已生成')
 
                 deploy_to_huggingface(
                     workdir, repository, revision, n_repeats, pretrained_model,
@@ -1238,9 +1238,9 @@ def pipeline_start(ch_names, train_type, toml_index=None, toml_name=None, progre
             )
             url = f'https://civitai.com/models/{model_id}'
             if not draft:
-                logging.info(f'Deploy success, model now can be seen at {url} .')
+                logger.success(f'Deploy success, model now can be seen at {url} .')
             else:
-                logging.info(f'Draft created, it can be seed at {url} .')
+                logger.success(f'Draft created, it can be seed at {url} .')
 
         progress(0.75, desc="[全自动训练] 上传抱抱脸")
         time.sleep(5)
@@ -1268,9 +1268,9 @@ def get_hf_token():
 def auto_crawler(chars_list, number):
     global crawler_clients
     crawler_clients["client_" + str(number)] = Client(f"AppleHarem/AppleBlock-{number}", hf_token=get_hf_token())
-    logger.info(f"[信息] - 创建🐞{number}")
+    logger.info(f"创建🐞{number}")
     crawler_clients["client_" + str(number)] = crawler_clients["client_" + str(number)].submit(get_hf_token(), chars_list, True, api_name="/crawlup")
-    logger.info(f"[信息] - 提交🐞{number}训练集任务")
+    logger.info(f"提交🐞{number}训练集任务")
     gr.Info("[🐞"+str(number)+"] 全自动训练集任务已提交")
 
 
@@ -1523,7 +1523,7 @@ if __name__ == "__main__":
                 with gr.Column(visible=not drop_use_presets.value, elem_classes="drop_custom_setting") as black_custom_setting:
                     drop_custom_blacklist = gr.Dropdown(ref_custom_blacklist(True), value=ref_custom_blacklist(True)[0], label="自定义黑名单", elem_id="custom_list", interactive=True, info="黑名单路径cfgs/blacklist/", filterable=False)
                     drop_ref_button = gr.Button("🔄", elem_classes='refresh_custom_list')
-            op_exists_txt = gr.Dropdown(["复制文件", "忽略文件", "覆盖文件", "附加标签"], value="附加标签", info="对于已存在标签，打标器的行为", show_label=False, interactive=True, filterable=False)
+            op_exists_txt = gr.Dropdown(["复制文件", "忽略文件", "覆盖文件", "附加标签"], value="覆盖文件", info="对于已存在标签，打标器的行为", show_label=False, interactive=True, filterable=False)
             tagger_button = gr.Button("打标", variant="primary")
             # tagger_type.select(tagger_chooser_ctrl, None, [globals()[f'tagger_{("dropper" if tagger == "标签黑名单" else tagger)}_settings'] for tagger in taggers])
             tagger_type.select(tagger_chooser_ctrl, None, [globals()[f'tagger_{("anal" if tagger == "json解析" else tagger)}_settings'] for tagger in taggers])
