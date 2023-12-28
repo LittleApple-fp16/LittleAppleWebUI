@@ -38,6 +38,7 @@ try:
     from waifuc.action import HeadCountAction, AlignMinSizeAction, CCIPAction, ThreeStageSplitAction, ModeConvertAction, ClassFilterAction, PersonSplitAction, TaggingAction, RatingFilterAction, NoMonochromeAction, RandomFilenameAction, FirstNSelectAction, FilterSimilarAction, FileExtAction
     from waifuc.export import SaveExporter, TextualInversionExporter
     from waifuc.source import GelbooruSource, PixivSearchSource, ZerochanSource, LocalSource, GcharAutoSource
+    from pathlib import Path
 
     from ditk import logging
     from hbutils.system import TemporaryDirectory
@@ -63,6 +64,7 @@ try:
     from cyberharem.publish.convert import convert_to_webui_lora
 except ModuleNotFoundError as e:
     print(f"[致命错误] - 检测到模块丢失: {e}， 正在尝试安装依赖，请等待安装完成后再次打开")
+    time.sleep(5)
     import subprocess
     if os.name == 'nt':
         subprocess.run(['dependencies.bat'], check=True)
@@ -1136,7 +1138,7 @@ def pipeline_start(ch_names, train_type, toml_index=None, toml_name=None, progre
             _ch_json = [file for file in hf_fs.glob(f'datasets/deepghs/game_characters/*/index.json')]
             for game in _ch_json:
                 names = {}
-                json_file = hf_hub_download(repo_id='deepghs/game_characters', repo_type='dataset', filename=os.path.join(os.path.basename(os.path.dirname(game)), 'index.json'),
+                json_file = hf_hub_download(repo_id='deepghs/game_characters', repo_type='dataset', filename=Path(os.path.join(os.path.basename(os.path.dirname(game)), 'index.json')).as_posix(),
                                             token=os.environ['HF_TOKEN'])
                 with open(json_file, 'r', encoding='utf-8') as f:
                     json_p = json.load(f)
