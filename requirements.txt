@@ -103,6 +103,7 @@ omegaconf==2.3.0
 onnxruntime==1.15.0
 onnxruntime-gpu==1.16.1
 opencv-python==4.8.1.78
+opencv-contrib-python==4.8.1.78
 orjson==3.9.9
 packaging==23.2
 pandas==2.1.1
