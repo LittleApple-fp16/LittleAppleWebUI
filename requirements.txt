@@ -64,7 +64,7 @@ gradio_client==0.7.0
 grpcio==1.59.0
 h11==0.14.0
 hbutils==0.9.1
-hcpdiff @ git+https://github.com/IrisRainbowNeko/HCP-Diffusion
+hcpdiff @ git+https://github.com/IrisRainbowNeko/HCP-Diffusion@dev
 httpcore==0.18.0
 httpx==0.25.1
 huggingface_hub==0.19.4

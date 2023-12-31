@@ -4,6 +4,7 @@ _base_:
 model:
   pretrained_model_name_or_path: 'deepghs/animefull-latest'
   clip_skip: 2
+  # ema: null
 
 character_name: 
 dataset_dir: 
@@ -73,5 +74,4 @@ logger:
 #    _partial_: True
 #    out_path: null
 #    log_step: 5
-
 
