@@ -398,6 +398,7 @@ def mirror_process(progress=gr.Progress(track_tqdm=True)):
     tag_count = 0
     gr.Info("选择包含图像的文件夹")
     root = tk.Tk()
+    root.tk.call('encoding', 'system', 'unicode')
     root.withdraw()
     pths = []
     while True:
@@ -416,9 +417,9 @@ def mirror_process(progress=gr.Progress(track_tqdm=True)):
                 img_path = os.path.join(i_pth, filename)
                 txt_file = os.path.splitext(img_path)[0] + ".txt"
                 json_file = os.path.splitext(img_path)[0] + ".json"
-                img = cv2.imread(img_path)
+                img = cv2.imread(Path(img_path).as_posix())
                 img_mirror = cv2.flip(img, 1)
-                cv2.imwrite(os.path.join(output_folder, filename), img_mirror)
+                cv2.imwrite(Path(os.path.join(output_folder, filename)).as_posix(), img_mirror)
                 img_count = img_count + 1
                 # tag
                 if os.path.isfile(txt_file):
@@ -716,6 +717,7 @@ def run_train_lora(dataset_name, epoch, bs, toml_index, custom_toml_name=None, i
     import toml
     logger.info(f"[{dataset_name}] LoRA开始训练")
     gr.Info(f"[{dataset_name}] LoRA开始训练")
+    batch_list = []
     with tempfile.NamedTemporaryFile(suffix=".toml", delete=False) as tt:
         if toml_index == 3:
             toml_index = custom_toml_name
@@ -729,7 +731,7 @@ def run_train_lora(dataset_name, epoch, bs, toml_index, custom_toml_name=None, i
             if is_batch:
                 batch_list = batch_name
             else:
-                batch_list = [dataset_name]
+                batch_list.append(dataset_name)
             for dataset in batch_list:
                 if not dataset.endswith(' (kohya)'):  # from dataset_dropdown
                     raise DatasetTypeError(dataset, "正在尝试加载kohya数据集")
@@ -883,12 +885,16 @@ def saving_output(dataset_name, rep_name=None, progress=gr.Progress(track_tqdm=T
         gr.Warning("无法保存: 运行结果内没有图像")
 
 
-def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_character_thre, wd14_weight, wd14_overlap, ml_real_name, ml_thre, ml_scale, ml_weight, ml_ratio, ml_overlap, need_black, drop_presets, drop_custom, exists_txt, del_json, rep_name=None, progress=gr.Progress(track_tqdm=True)):
+def tagging_main(dataset_name, rep, ttype, wd14_tagger, wd14_general_thre, wd14_character_thre, wd14_weight, wd14_overlap, ml_real_name, ml_thre, ml_scale, ml_weight, ml_ratio, ml_overlap, need_black, drop_presets, drop_custom, exists_txt, del_json, rep_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     # TODO performance optimization & kohya support
     loaded_dataset = dataset_getImg(dataset_name, rep_name)
     images = loaded_dataset[0]
     img_name = loaded_dataset[1]
+    if dataset_name.endswith(" (kohya)"):
+        dataset_path = f'dataset/_kohya/{dataset_name.replace(" (kohya)", "")}/{rep}'
+    else:
+        dataset_path = f'dataset/{dataset_name}'
     if ttype == taggers[0]:
         gr.Info("数据打标开始处理 打标器: wd14")
         logger.info("数据打标正在处理...")
@@ -903,21 +909,21 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
                 result = str(str(drop_blacklisted_tags([result], drop_presets, drop_custom))[2:-2])
             if result:
                 name = name.replace(".txt", "").replace(".jpg", "").replace(".png", "").replace(".jpeg", "")
-                if os.path.isfile(f'dataset/{dataset_name}/{name}.txt'):
+                if os.path.isfile(f'{dataset_path}/{name}.txt'):
                     if exists_txt == "复制文件":
-                        os.rename(f'dataset/{dataset_name}/{name}.txt', f'{dataset_name}/{name}_backup.txt')
-                        with open(f'dataset/{dataset_name}/{name}.txt', 'w') as tag:
+                        os.rename(f'{dataset_path}/{name}.txt', f'{dataset_path}/{name}_backup.txt')
+                        with open(f'{dataset_path}/{name}.txt', 'w') as tag:
                             tag.write(result)
                     elif exists_txt == "忽略文件":
                         pass
                     elif exists_txt == "附加标签":
-                        with open(f'dataset/{dataset_name}/{name}.txt', 'a+') as tag:
+                        with open(f'{dataset_path}/{name}.txt', 'a+') as tag:
                             tag.write(result)
                     elif exists_txt == "覆盖文件":
-                        with open(f'dataset/{dataset_name}/{name}.txt', 'w') as tag:
+                        with open(f'{dataset_path}/{name}.txt', 'w') as tag:
                             tag.write(result)
                 else:
-                    with open(f'dataset/{dataset_name}/{name}.txt', 'w') as tag:
+                    with open(f'{dataset_path}/{name}.txt', 'w') as tag:
                         tag.write(result)
         gr.Info("数据打标已结束")
         logger.success("数据打标完成")
@@ -932,28 +938,28 @@ def tagging_main(dataset_name, ttype, wd14_tagger, wd14_general_thre, wd14_chara
             # print(result)
             if result:
                 name = name.replace(".txt", "")
-                if os.path.isfile(f'dataset/{dataset_name}/{name}.txt'):
+                if os.path.isfile(f'{dataset_path}/{name}.txt'):
                     if exists_txt == "复制文件":
-                        os.rename(f'dataset/{dataset_name}/{name}.txt', f'{dataset_name}/{name}_backup.txt')
-                        with open(f'dataset/{dataset_name}/{name}.txt', 'w') as tag:
+                        os.rename(f'{dataset_path}/{name}.txt', f'{dataset_path}/{name}_backup.txt')
+                        with open(f'{dataset_path}/{name}.txt', 'w') as tag:
                             tag.write(result)
                     elif exists_txt == "忽略文件":
                         pass
                     elif exists_txt == "附加标签":
-                        with open(f'dataset/{dataset_name}/{name}.txt', 'a+') as tag:
+                        with open(f'{dataset_path}/{name}.txt', 'a+') as tag:
                             tag.write(result)
                     elif exists_txt == "覆盖文件":
-                        with open(f'dataset/{dataset_name}/{name}.txt', 'w') as tag:
+                        with open(f'{dataset_path}/{name}.txt', 'w') as tag:
                             tag.write(result)
                 else:
-                    with open(f'dataset/{dataset_name}/{name}.txt', 'w') as tag:
+                    with open(f'{dataset_path}/{name}.txt', 'w') as tag:
                         tag.write(result)
         gr.Info("数据打标已结束")
         logger.success("数据打标完成")
     elif ttype == taggers[2]:
         gr.Info("标签解析开始处理")
         logger.info("数据打标 - 标签解析正在处理...")
-        json_files = glob.glob(f'dataset/{dataset_name}/.*.json')
+        json_files = glob.glob(f'{dataset_path}/.*.json')
         for json_file in tqdm(json_files, file=sys.stdout, desc="执行标签解析"):
             with open(json_file, 'r', encoding='utf-8') as f:
                 jdata = json.load(f)
@@ -1119,8 +1125,8 @@ def pipeline_start_lora(ch_names, toml_index, custom_toml=None):
 def pipeline_start(ch_names, train_type, toml_index=None, toml_name=None, progress=gr.Progress(track_tqdm=True)):
     global output_cache
     global cfg
-    bs = 4
-    epoc = 10
+    bs = 4  # 4
+    epoc = 10  # 10
     is_kohya = bool(train_type)
     riyu = kakasi()
     actions = [NoMonochromeAction(), CCIPAction(), PersonSplitAction(),  # ccip here
@@ -1163,10 +1169,13 @@ def pipeline_start(ch_names, train_type, toml_index=None, toml_name=None, progre
             save_path = f"pipeline\\dataset\\_kohya\\{ch_letter}\\1_{ch_letter}"
         progress(0.25, desc="[全自动训练] 数据集获取")
 ###
-        source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
-        source_init.attach(*actions).export(
-            TextualInversionExporter(save_path)
-        )
+        try:
+            source_init = GcharAutoSource(ch, pixiv_refresh_token=cfg.get('pixiv_token', ''))
+            source_init.attach(*actions).export(
+                TextualInversionExporter(save_path)
+            )
+        except ValueError as e:
+            logger.error(e)
         time.sleep(5)
 ###
         progress(0.5, desc=f"[全自动训练] {'LoRA' if is_kohya else 'PLoRA'}训练")
@@ -1679,13 +1688,13 @@ if __name__ == "__main__":
         headd_button.click(head_detect, [dataset_dropdown, headd_level, headd_infer, headd_conf, headd_iou, kohya_rep_dropdown], [message_output], scroll_to_output=True)
         textd_button.click(text_detect, [dataset_dropdown, kohya_rep_dropdown], [message_output], scroll_to_output=True)
         plora_train_button.click(run_train_plora, [dataset_dropdown, plora_min_step, plora_batch_size, plora_epoch, plora_batch_train, plora_dataset_dropdown], [message_output], scroll_to_output=True)
-        lora_train_button.click(run_train_lora, [dataset_dropdown, lora_epoch, lora_batch_size, lora_toml_presets, toml_custom_dropdown, lora_batch_train, lora_dataset_dropdown], [message_output], scroll_to_output=True)
+        lora_train_button.click(run_train_lora, [dataset_dropdown, lora_epoch, lora_batch_size, lora_toml_presets, toml_custom_dropdown, gr.Checkbox(value=False, visible=False), lora_batch_train, lora_dataset_dropdown], [message_output], scroll_to_output=True)
         areaf_button.click(area_fill, [dataset_dropdown, areaf_isRandom, areaf_color, kohya_rep_dropdown], [message_output], scroll_to_output=True)
         areab_button.click(area_blur, [dataset_dropdown, areab_radius, kohya_rep_dropdown], [message_output], scroll_to_output=True)
         crop_hw_button.click(crop_hw, [dataset_dropdown, kohya_rep_dropdown], [message_output], scroll_to_output=True)
         crop_trans_button.click(crop_trans, [dataset_dropdown, crop_trans_thre, crop_trans_filter, kohya_rep_dropdown], [message_output], scroll_to_output=True)
         tagger_button.click(tagging_main,
-                            [dataset_dropdown, tagger_type, wd14_tagger_model, wd14_general_threshold, wd14_character_threshold, wd14_format_weight, wd14_drop_overlap, ml_use_real_name, ml_threshold,
+                            [dataset_dropdown, kohya_rep_dropdown, tagger_type, wd14_tagger_model, wd14_general_threshold, wd14_character_threshold, wd14_format_weight, wd14_drop_overlap, ml_use_real_name, ml_threshold,
                              ml_size, ml_format_weight, ml_keep_ratio, ml_drop_overlap, use_blacklist, drop_use_presets, drop_custom_blacklist, op_exists_txt, anal_del_json, kohya_rep_dropdown], [message_output],
                             scroll_to_output=True)
         illu_button.click(download_illust, [illu_name, illu_get_source, illu_max_size], [message_output], scroll_to_output=True)
