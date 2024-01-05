@@ -1126,14 +1126,15 @@ def pipeline_start(ch_names, train_type, toml_index=None, toml_name=None, progre
     global output_cache
     global cfg
     bs = 4  # 4
-    epoc = 10  # 10
+    exce_images = 1000
+    epoc = 0  # recommend step calc: step=329.94*image_num^0.554
     is_kohya = bool(train_type)
     riyu = kakasi()
     actions = [NoMonochromeAction(), CCIPAction(), PersonSplitAction(),  # ccip here
                HeadCountAction(1), TaggingAction(force=True),
                FilterSimilarAction('all'), ModeConvertAction('RGB'),  # FilterSimilar: lpips差分过滤
                FileExtAction(ext='.png'),  # png format
-               FirstNSelectAction(1000)]  # 700+
+               FirstNSelectAction(exce_images)]
     ch_list = ch_names.split(',')
     for ch in ch_list:
         logging.info("Ready...")
@@ -1179,8 +1180,11 @@ def pipeline_start(ch_names, train_type, toml_index=None, toml_name=None, progre
         time.sleep(5)
 ###
         progress(0.5, desc=f"[全自动训练] {'LoRA' if is_kohya else 'PLoRA'}训练")
+        logger.info('计算最佳参数...')
+        epoc = round((329.94*exce_images**0.554)/exce_images)
+        logger.info(f'预期Epoch: {epoc}, 每轮样本数: {exce_images}')
         if not is_kohya:
-            run_train_plora(ch_letter, bs=bs, epoc=epoc, min_step=2000, is_pipeline=True)  # bs, epoch 32 25
+            run_train_plora(ch_letter, bs=bs, epoc=epoc, min_step=None, is_pipeline=True) # min_step=2000
         else:
             run_train_lora(ch_letter, bs=bs, epoch=epoc, toml_index=toml_index, custom_toml_name=toml_name, is_pipeline=True)
 ###
