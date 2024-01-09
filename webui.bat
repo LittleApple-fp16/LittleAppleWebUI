@@ -35,7 +35,9 @@ if not exist %VENV_NAME% (
             echo Unsupported CUDA Version. Please contact the developer.
         )
     )
-
+    echo [info] Installing triton...
+    python -m pip install triton-2.0.0-cp310-cp310-win_amd64.whl --no-deps
+    echo [info] Installing xformers...
     python -m pip install xformers==0.0.23 --index-url https://download.pytorch.org/whl/cu118 --no-deps
     pip install -r requirements.txt
     echo [info] Done. Please restart.
