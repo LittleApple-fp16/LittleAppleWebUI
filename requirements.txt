@@ -54,7 +54,7 @@ fonttools==4.43.1
 frozenlist==1.4.0
 fsspec==2023.9.2
 future==0.18.3
-gchar @ git+https://github.com/narugo1992/gchar.git@07a528a248a0882c175fef437a178e49e717a126
+gchar @ git+https://github.com/narugo1992/gchar.git
 gitdb==4.0.11
 GitPython==3.1.40
 google-auth==2.23.3
